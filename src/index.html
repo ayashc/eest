@@ -8,8 +8,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* =====================================================================
-   Базові змінні
-   Base variables
+   Базові змінні — змінюємо тут, змінюється скрізь
+   Base variables — change here, changes everywhere
    ===================================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -399,6 +399,10 @@ html, body {
 .p-meta      { overflow: hidden; }
 .p-title     { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-artist    { font-size: 12px; color: var(--text2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-quality   { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.q-badge     { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; padding: 2px 6px; border-radius: 4px; background: rgba(var(--accent),0.14); color: rgba(var(--accent),1); text-transform: uppercase; }
+.q-badge.lossless { background: rgba(72,199,116,0.14); color: #48c774; }
+.q-badge.lossy    { background: rgba(255,180,0,0.12);  color: #ffb400; }
 
 /* Центральна частина — кнопки + прогрес */
 /* Center part — controls + progress bar */
@@ -474,6 +478,82 @@ html, body {
 }
 .vol-slider:hover::-webkit-slider-thumb { transform: scale(1.2); }
 
+
+/* ─── Sort bar — рядок сортування зверху видів ───────
+   Sort bar — sorting controls at the top of each view  */
+.sort-bar {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 18px; flex-wrap: wrap;
+}
+.sort-label { font-size: 11px; color: var(--text3); margin-right: 4px; text-transform: uppercase; letter-spacing: .08em; }
+.sort-btn {
+  padding: 4px 11px; border-radius: 20px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  color: var(--text2); font-size: 12px; font-weight: 500; font-family: inherit;
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.sort-btn:hover  { background: var(--glass-2); color: var(--text); }
+.sort-btn.active { background: rgba(var(--accent),.16); border-color: rgba(var(--accent),.3); color: rgba(var(--accent),1); }
+.sort-dir {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  color: var(--text2); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s; margin-left: 2px;
+}
+.sort-dir:hover { background: var(--glass-2); color: var(--text); }
+
+
+/* ─── Stats bar — загальна статистика зверху видів ─────────
+   Stats bar — total count + duration at the top of views    */
+.stats-bar {
+  font-size: 12px; color: var(--text3);
+  margin-bottom: 16px; letter-spacing: .02em;
+}
+.stats-bar strong { color: var(--text2); font-weight: 600; }
+
+/* ─── Grouped albums — артист як заголовок секції ───────────
+   Grouped albums — artist as section header                  */
+.artist-section { margin-bottom: 36px; }
+.artist-section-header {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 14px; cursor: pointer;
+  padding: 6px 0;
+}
+.artist-section-header:hover .artist-section-name { color: var(--text); }
+.artist-section-avatar {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  overflow: hidden; background: var(--bg3);
+  border: 1px solid var(--glass-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: var(--text2);
+}
+.artist-section-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.artist-section-name {
+  font-size: 17px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--text2); transition: color .15s;
+}
+.artist-section-count { font-size: 12px; color: var(--text3); margin-top: 1px; }
+
+/* ─── Artists index — алфавітний список для швидкого переходу
+   Artists index — compact alphabetical list for quick jump   */
+.artist-idx-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 7px 10px; border-radius: 8px;
+  cursor: pointer; transition: background .12s;
+}
+.artist-idx-item:hover { background: var(--glass); }
+.artist-idx-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  overflow: hidden; background: var(--bg3);
+  border: 1px solid var(--glass-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--text2);
+}
+.artist-idx-avatar img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.artist-idx-name { font-size: 13.5px; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artist-idx-count { font-size: 11px; color: var(--text3); flex-shrink: 0; }
+
 /* Прихований canvas для витягування кольору з обкладинки */
 /* Hidden canvas for extracting dominant color from cover art */
 #color-canvas { position: fixed; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
@@ -524,21 +604,65 @@ html, body {
         <div class="empty-title">Бібліотека порожня</div>
         <div class="empty-sub">Натисни "Add Folder" щоб додати музику</div>
       </div>
-      <div id="album-grid" style="display:none"></div>
+      <div id="albums-header" style="display:none">
+        <div class="sort-bar">
+          <span class="sort-label">View</span>
+          <button class="sort-btn active" id="alb-btn-title"  onclick="sortAlbums('title',this)">Title</button>
+          <button class="sort-btn"        id="alb-btn-artist" onclick="sortAlbums('artist',this)">By Artist</button>
+          <button class="sort-btn"        id="alb-btn-year"   onclick="sortAlbums('year',this)">By Year</button>
+          <button class="sort-dir" id="alb-dir" onclick="flipDir('alb')" title="Reverse">↑</button>
+        </div>
+        <div class="stats-bar" id="alb-stats"></div>
+      </div>
+      <div id="album-grid"></div>
     </div>
 
     <!-- Артисти -->
     <!-- Artists -->
     <div id="view-artists" class="view">
-      <div class="view-title">Artists</div>
+      <div class="sort-bar">
+        <span class="sort-label">Sort</span>
+        <button class="sort-btn active" onclick="sortArtists('name',this)">Name</button>
+        <button class="sort-btn" onclick="sortArtists('albums',this)">Albums</button>
+        <button class="sort-btn" onclick="sortArtists('songs',this)">Songs</button>
+        <button class="sort-dir" id="art-dir" onclick="flipDir('art')" title="Reverse">↑</button>
+      </div>
+      <div class="stats-bar" id="art-stats"></div>
       <div id="artist-list"></div>
     </div>
 
     <!-- Пісні -->
     <!-- Songs -->
     <div id="view-songs" class="view">
-      <div class="view-title">Songs</div>
+      <div class="sort-bar">
+        <span class="sort-label">Sort</span>
+        <button class="sort-btn active" onclick="sortSongs('title',this)">Title</button>
+        <button class="sort-btn" onclick="sortSongs('artist',this)">Artist</button>
+        <button class="sort-btn" onclick="sortSongs('album',this)">Album</button>
+        <button class="sort-btn" onclick="sortSongs('duration',this)">Duration</button>
+        <button class="sort-dir" id="sng-dir" onclick="flipDir('sng')" title="Reverse">↑</button>
+      </div>
+      <div class="stats-bar" id="sng-stats"></div>
       <div id="song-list"></div>
+    </div>
+
+    <!-- Артист — показується при кліку на артиста -->
+    <!-- Artist detail — shown when clicking an artist -->
+    <div id="view-artist" class="view">
+      <div class="detail-hero" style="align-items:flex-start">
+        <div class="detail-art" id="ar-art" style="width:150px;height:150px;border-radius:50%;flex-shrink:0"></div>
+        <div class="detail-meta" style="justify-content:center">
+          <div class="detail-type">Artist</div>
+          <div class="detail-name" id="ar-name"></div>
+          <div class="detail-extra" id="ar-info"></div>
+        </div>
+        <button class="btn-back" onclick="goBackArtist()">← Back</button>
+      </div>
+      <div class="track-divider"></div>
+      <div style="padding:0 26px 8px">
+        <div class="view-title" style="font-size:15px;margin-bottom:14px">Albums</div>
+        <div id="ar-album-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:16px"></div>
+      </div>
     </div>
 
     <!-- Деталь альбому — показується при кліку на картку -->
@@ -579,6 +703,7 @@ html, body {
     <div class="p-meta">
       <div class="p-title"  id="p-title">Нічого не грає</div>
       <div class="p-artist" id="p-artist">—</div>
+      <div class="p-quality" id="p-quality"></div>
     </div>
   </div>
 
@@ -626,6 +751,14 @@ let curAlbum  = null // ключ відкритого альбому / currently
 let backView  = 'albums' // куди повертатись з деталі / where to go back from detail
 let nowPath   = null // шлях файлу що грає / currently playing file path
 
+// Стан сортування для кожного виду — ключ і напрямок
+// Sort state for each view — key and direction
+const sortState = {
+  alb: { key: 'title',  asc: true },
+  art: { key: 'name',   asc: true },
+  sng: { key: 'title',  asc: true },
+}
+
 const audio = document.getElementById('audio')
 
 // ─── Утиліти ──────────────────────────────────────────────────
@@ -635,6 +768,15 @@ const audio = document.getElementById('audio')
 const fmt = s => {
   if (!s || isNaN(s)) return '0:00'
   return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
+}
+
+// Форматуємо загальну тривалість у зручний вигляд
+// Format total duration into human-readable form
+const fmtTotal = sec => {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (h > 0) return `${h} год ${m} хв`
+  return `${m} хв`
 }
 
 const qs  = s => document.querySelector(s)
@@ -777,45 +919,148 @@ function buildAlbums() {
 // ─── Рендер гріду альбомів ────────────────────────────────────
 // ─── Render album grid ────────────────────────────────────────
 function renderGrid() {
-  const grid  = qs('#album-grid')
-  const empty = qs('#empty-state')
-  const list  = Object.values(albums).sort((a,b) => a.title.localeCompare(b.title))
+  const grid   = qs('#album-grid')
+  const empty  = qs('#empty-state')
+  const header = qs('#albums-header')
+  const { key, asc } = sortState.alb
+  const allAlbums = Object.values(albums)
 
-  if (list.length === 0) {
-    grid.style.display  = 'none'
-    empty.style.display = 'flex'
+  if (allAlbums.length === 0) {
+    grid.style.display   = 'none'
+    header.style.display = 'none'
+    empty.style.display  = 'flex'
     return
   }
 
-  empty.style.display = 'none'
-  grid.style.display  = 'grid'
+  empty.style.display  = 'none'
+  header.style.display = 'block'
   grid.innerHTML = ''
 
-  for (const alb of list) {
-    const card = document.createElement('div')
-    card.className = 'album-card'
+  // Статистика зверху
+  // Stats at the top
+  const totalSec = allAlbums.reduce((s,a) => s + a.tracks.reduce((ss,t) => ss+(t.duration||0),0), 0)
+  qs('#alb-stats').innerHTML =
+    `<strong>${allAlbums.length}</strong> albums · <strong>${allAlbums.reduce((s,a)=>s+a.tracks.length,0)}</strong> songs · ${fmtTotal(totalSec)}`
 
-    // Зберігаємо ключ в data-атрибуті — так кліки завжди знайдуть правильний альбом
-    // Store key in data attribute — so clicks always find the right album
-    card.dataset.albumKey = alb.key
+  if (key === 'artist') {
+    // ── Групований вигляд по артистах ──────────────────────────
+    // ── Grouped view by artist ──────────────────────────────────
+    grid.style.display = 'block'
 
-    card.innerHTML = `
-      <div class="album-cover">
-        ${alb.cover
-          ? `<img src="${alb.cover}" alt="" loading="lazy">`
-          : `<div class="album-cover-ph">♫</div>`}
-      </div>
-      <div class="album-info">
-        <div class="album-name">${escHtml(alb.title)}</div>
-        <div class="album-sub">${escHtml(alb.artist)}</div>
-        ${alb.year ? `<div class="album-year">${alb.year}</div>` : ''}
-      </div>`
+    // Будуємо map артистів з їхніми альбомами
+    // Build artist map with their albums
+    const artistMap = {}
+    for (const alb of allAlbums) {
+      const n = alb.artist
+      if (!artistMap[n]) artistMap[n] = { name: n, cover: null, latestYear: 0, albums: [] }
+      artistMap[n].albums.push(alb)
+      if (alb.cover && (alb.year||0) >= artistMap[n].latestYear) {
+        artistMap[n].cover = alb.cover
+        artistMap[n].latestYear = alb.year||0
+      }
+    }
 
-    // Слухач клавіші — відкриваємо деталь альбому
-    // Click listener — opens album detail
-    card.addEventListener('click', () => openAlbum(card.dataset.albumKey))
-    grid.appendChild(card)
+    const artistList = Object.values(artistMap).sort((a,b) => asc
+      ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))
+
+    for (const ar of artistList) {
+      // Сортуємо альбоми всередині секції по році
+      // Sort albums within section by year
+      ar.albums.sort((a,b) => (a.year||0) - (b.year||0))
+
+      const section = document.createElement('div')
+      section.className = 'artist-section'
+      section.id = 'artist-sec-' + encodeURIComponent(ar.name)
+
+      const avatarHtml = ar.cover
+        ? `<div class="artist-section-avatar"><img src="${ar.cover}" alt=""></div>`
+        : `<div class="artist-section-avatar">${escHtml(ar.name[0]?.toUpperCase()||'?')}</div>`
+
+      const headerEl = document.createElement('div')
+      headerEl.className = 'artist-section-header'
+      headerEl.innerHTML = `
+        ${avatarHtml}
+        <div>
+          <div class="artist-section-name">${escHtml(ar.name)}</div>
+          <div class="artist-section-count">${ar.albums.length} albums</div>
+        </div>`
+      section.appendChild(headerEl)
+
+      // Грід альбомів під заголовком
+      // Albums grid under the header
+      const innerGrid = document.createElement('div')
+      innerGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
+      for (const alb of ar.albums) {
+        innerGrid.appendChild(makeAlbumCard(alb))
+      }
+      section.appendChild(innerGrid)
+      grid.appendChild(section)
+    }
+
+  } else if (key === 'year') {
+    // ── Групований вигляд по роках ──────────────────────────────
+    // ── Grouped view by year ────────────────────────────────────
+    grid.style.display = 'block'
+
+    const yearMap = {}
+    for (const alb of allAlbums) {
+      const y = alb.year || '—'
+      if (!yearMap[y]) yearMap[y] = []
+      yearMap[y].push(alb)
+    }
+    const years = Object.keys(yearMap).sort((a,b) => asc ? Number(a)-Number(b) : Number(b)-Number(a))
+
+    for (const yr of years) {
+      const section = document.createElement('div')
+      section.className = 'artist-section'
+
+      const headerEl = document.createElement('div')
+      headerEl.className = 'artist-section-header'
+      headerEl.style.cursor = 'default'
+      headerEl.innerHTML = `
+        <div style="font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--text2)">${escHtml(String(yr))}</div>
+        <div class="artist-section-count">${yearMap[yr].length} albums</div>`
+      section.appendChild(headerEl)
+
+      const innerGrid = document.createElement('div')
+      innerGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
+      for (const alb of yearMap[yr].sort((a,b) => a.title.localeCompare(b.title))) {
+        innerGrid.appendChild(makeAlbumCard(alb))
+      }
+      section.appendChild(innerGrid)
+      grid.appendChild(section)
+    }
+
+  } else {
+    // ── Звичайний плоский грід по назві ─────────────────────────
+    // ── Regular flat grid sorted by title ───────────────────────
+    grid.style.display = 'grid'
+
+    const list = [...allAlbums].sort((a,b) => {
+      const cmp = a.title.localeCompare(b.title)
+      return asc ? cmp : -cmp
+    })
+    for (const alb of list) grid.appendChild(makeAlbumCard(alb, true))
   }
+}
+
+// Фабрика картки альбому — щоб не повторювати код
+// Album card factory — avoids code repetition
+function makeAlbumCard(alb, showArtist = false) {
+  const card = document.createElement('div')
+  card.className = 'album-card'
+  card.dataset.albumKey = alb.key
+  card.innerHTML = `
+    <div class="album-cover">
+      ${alb.cover ? `<img src="${alb.cover}" alt="" loading="lazy">` : `<div class="album-cover-ph">♫</div>`}
+    </div>
+    <div class="album-info">
+      <div class="album-name">${escHtml(alb.title)}</div>
+      ${showArtist ? `<div class="album-sub">${escHtml(alb.artist)}</div>` : ''}
+      ${alb.year ? `<div class="album-year">${alb.year}</div>` : ''}
+    </div>`
+  card.addEventListener('click', () => openAlbum(card.dataset.albumKey))
+  return card
 }
 
 // ─── Відкрити деталь альбому ──────────────────────────────────
@@ -890,31 +1135,102 @@ function renderArtists() {
 
   for (const t of library) {
     const n = t.albumArtist || t.artist
-    if (!map[n]) map[n] = { name: n, albums: new Set(), count: 0 }
+    if (!map[n]) map[n] = { name: n, albums: new Set(), count: 0, cover: null, latestYear: 0 }
     map[n].albums.add(t.album)
     map[n].count++
+    // Аватар = обкладинка ОСТАННЬОГО альбому по даті
+    // Avatar = cover of the LATEST album by date
+    if (t.cover && (t.year || 0) >= map[n].latestYear) {
+      map[n].cover      = t.cover
+      map[n].latestYear = t.year || 0
+    }
   }
 
-  const sorted = Object.values(map).sort((a,b) => a.name.localeCompare(b.name))
+  const { key, asc } = sortState.art
+  const sorted = Object.values(map).sort((a,b) => {
+    if (key === 'albums') return asc ? a.albums.size-b.albums.size : b.albums.size-a.albums.size
+    if (key === 'songs')  return asc ? a.count-b.count : b.count-a.count
+    const cmp = a.name.localeCompare(b.name)
+    return asc ? cmp : -cmp
+  })
+
+  // Статистика
+  // Stats
+  qs('#art-stats').innerHTML =
+    `<strong>${sorted.length}</strong> artists`
+
   list.innerHTML = ''
   for (const ar of sorted) {
     const row = document.createElement('div')
-    row.className = 'artist-row'
+    row.className = 'artist-idx-item'
+
+    const avatarHtml = ar.cover
+      ? `<div class="artist-idx-avatar"><img src="${ar.cover}" alt=""></div>`
+      : `<div class="artist-idx-avatar">${escHtml(ar.name[0]?.toUpperCase() || '?')}</div>`
+
     row.innerHTML = `
-      <div class="artist-avatar">${escHtml(ar.name[0]?.toUpperCase() || '?')}</div>
-      <div>
-        <div class="artist-name-t">${escHtml(ar.name)}</div>
-        <div class="artist-count-t">${ar.albums.size} albums · ${ar.count} songs</div>
-      </div>`
+      ${avatarHtml}
+      <div class="artist-idx-name">${escHtml(ar.name)}</div>
+      <div class="artist-idx-count">${ar.albums.size} alb · ${ar.count} songs</div>`
+
+    // Клік — переходимо до Albums у режимі "By Artist" і скролимо до артиста
+    // Click — go to Albums in "By Artist" mode and scroll to this artist
+    row.addEventListener('click', () => jumpToArtist(ar.name))
     list.appendChild(row)
   }
 }
 
+// Переходимо до Albums > By Artist і скролимо до потрібного артиста
+// Go to Albums > By Artist mode and scroll to the target artist
+function jumpToArtist(artistName) {
+  // Перемикаємо Albums на режим By Artist
+  // Switch Albums to By Artist mode
+  sortState.alb.key = 'artist'
+  sortState.alb.asc = true
+  // Активуємо правильну кнопку в sort bar
+  qsa('#view-albums .sort-btn').forEach(b => b.classList.remove('active'))
+  qs('#alb-btn-artist')?.classList.add('active')
+  qs('#alb-dir').textContent = '↑'
+
+  renderGrid()
+
+  // Переходимо на вид Albums
+  // Switch to Albums view
+  showView('albums', qs('.nav-item[data-view="albums"]'))
+
+  // Після рендеру скролимо до секції цього артиста
+  // After render, scroll to this artist's section
+  setTimeout(() => {
+    const sec = qs('#artist-sec-' + encodeURIComponent(artistName))
+    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 50)
+}
+
+// openArtist removed — artists now jump to grouped Albums view
+// goBackArtist removed — no longer needed
+
 // ─── Рендер пісень ────────────────────────────────────────────
 // ─── Render songs ─────────────────────────────────────────────
 function renderSongs() {
-  const list   = qs('#song-list')
-  const sorted = [...library].sort((a,b) => a.title.localeCompare(b.title))
+  const list = qs('#song-list')
+  const { key, asc } = sortState.sng
+
+  // Сортуємо пісні за поточним критерієм
+  // Sort songs by current criterion
+  const sorted = [...library].sort((a,b) => {
+    if (key === 'duration') return asc ? (a.duration||0)-(b.duration||0) : (b.duration||0)-(a.duration||0)
+    const va = (a[key] || '').toLowerCase()
+    const vb = (b[key] || '').toLowerCase()
+    const cmp = va.localeCompare(vb)
+    return asc ? cmp : -cmp
+  })
+
+  // Статистика зверху — кількість пісень і загальна тривалість
+  // Stats — song count and total duration
+  const totalSec = library.reduce((s,t) => s+(t.duration||0), 0)
+  qs('#sng-stats').innerHTML =
+    `<strong>${library.length}</strong> songs · ${fmtTotal(totalSec)}`
+
   list.innerHTML = ''
   for (const t of sorted) {
     const row = document.createElement('div')
@@ -998,6 +1314,34 @@ function playTrack(track) {
   // Player bar — title and artist
   qs('#p-title').textContent  = track.title
   qs('#p-artist').textContent = `${track.artist} — ${track.album}`
+
+  // Показуємо якість файлу — формат, бітрейт, семплрейт
+  // Show file quality — format, bitrate, sample rate
+  const q   = track.quality || {}
+  const qEl = qs('#p-quality')
+  qEl.innerHTML = ''
+  const lossless = new Set(['flac','alac','wav','aiff','aif','dsf','dff','wv','ape'])
+  const isLossless = lossless.has((q.codec || q.container || '').toLowerCase())
+  if (q.container) {
+    const b = document.createElement('span')
+    b.className = 'q-badge ' + (isLossless ? 'lossless' : 'lossy')
+    b.textContent = q.container.toUpperCase()
+    qEl.appendChild(b)
+  }
+  if (q.bitrate) {
+    const b = document.createElement('span')
+    b.className = 'q-badge'
+    b.textContent = Math.round(q.bitrate / 1000) + ' kbps'
+    qEl.appendChild(b)
+  }
+  if (q.sampleRate) {
+    const b = document.createElement('span')
+    b.className = 'q-badge'
+    const sr = q.sampleRate >= 1000 ? (q.sampleRate / 1000) + ' kHz' : q.sampleRate + ' Hz'
+    const bd = q.bitsPerSample ? ' / ' + q.bitsPerSample + 'bit' : ''
+    b.textContent = sr + bd
+    qEl.appendChild(b)
+  }
   qs('#btn-play').textContent = '⏸'
 
   // Обкладинка в плеєрі
@@ -1122,6 +1466,44 @@ function showLoading(msg = 'Завантаження…') {
 }
 function hideLoading() {
   qs('#loading-overlay').classList.remove('visible')
+}
+
+// ─── Функції сортування ───────────────────────────────────────
+// ─── Sort functions ───────────────────────────────────────────
+
+// Перемикаємо активну кнопку сортування і ререндеримо
+// Toggle active sort button and re-render
+function setSortBtn(groupSel, activeEl) {
+  document.querySelectorAll(groupSel).forEach(b => b.classList.remove('active'))
+  activeEl.classList.add('active')
+}
+
+function sortAlbums(key, el) {
+  sortState.alb.key = key
+  setSortBtn('#view-albums .sort-btn', el)
+  renderGrid()
+}
+
+function sortArtists(key, el) {
+  sortState.art.key = key
+  setSortBtn('#view-artists .sort-btn', el)
+  renderArtists()
+}
+
+function sortSongs(key, el) {
+  sortState.sng.key = key
+  setSortBtn('#view-songs .sort-btn', el)
+  renderSongs()
+}
+
+// Стрілка напрямку — перемикає asc/desc і оновлює іконку
+// Direction arrow — toggles asc/desc and updates icon
+function flipDir(view) {
+  const map = { alb: ['alb-dir', renderGrid], art: ['art-dir', renderArtists], sng: ['sng-dir', renderSongs] }
+  const [btnId, fn] = map[view]
+  sortState[view].asc = !sortState[view].asc
+  qs('#' + btnId).textContent = sortState[view].asc ? '↑' : '↓'
+  fn()
 }
 
 // ─── Старт ────────────────────────────────────────────────────

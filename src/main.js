@@ -49,7 +49,10 @@ function scanDir(dirPath) {
       const fullPath = path.join(dirPath, entry.name)
       if (entry.isDirectory()) {
         files = files.concat(scanDir(fullPath))
-      } else if (AUDIO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+      } else if (
+        AUDIO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
+        !entry.name.startsWith('._') // ігноруємо macOS сміття / skip macOS junk files
+      ) {
         files.push(fullPath)
       }
     }
@@ -88,7 +91,16 @@ async function parseTrack(filePath) {
       trackNo:     common.track?.no   || 0,
       disc:        common.disk?.no    || 1,
       duration:    format.duration    || 0,
-      cover
+      cover,
+      // Технічна інформація про файл — формат, бітрейт, семплрейт, бітова глибина
+      // Technical file info — format, bitrate, sample rate, bit depth
+      quality: {
+        container:     format.container     || null,
+        codec:         format.codec         || null,
+        bitrate:       format.bitrate       || null,
+        sampleRate:    format.sampleRate    || null,
+        bitsPerSample: format.bitsPerSample || null,
+      }
     }
   } catch (e) {
     return null // файл нечитабельний — повертаємо null / unreadable file — return null
