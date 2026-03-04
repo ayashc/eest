@@ -1,0 +1,21 @@
+# Залежності — генеруються через npm install, не зберігаємо в гіт
+# Dependencies — generated via npm install, not stored in git
+node_modules/
+
+# Папка де Electron зберігає конфіг і кеш
+# Where Electron stores config and cache
+dist/
+out/
+
+# Системне сміття macOS
+# macOS junk
+.DS_Store
+
+# Логи
+# Logs
+*.log
+npm-debug.log*
+
+# Локальне середовище
+# Local environment
+.env
