@@ -4,43 +4,33 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
 const fs   = require('fs')
+const os   = require('os')
 const mm   = require('music-metadata')
 
 let mainWindow
 
-// Список форматів які ми вміємо грати (майже все що існує)
-// List of audio formats we support (basically everything that exists)
 const AUDIO_EXTS = new Set([
   '.mp3', '.flac', '.wav', '.ogg', '.aac',
   '.m4a', '.opus', '.wma', '.dsf', '.dff',
   '.ape', '.aiff', '.aif', '.wv', '.alac'
 ])
 
-// Файл конфіга — зберігаємо тут налаштування між сесіями
-// Config file — we store settings here between sessions
 const CONFIG_PATH = path.join(app.getPath('userData'), 'eest-config.json')
 
 function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH))
       return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
-  } catch (e) {
-    // якщо файл битий — просто починаємо з нуля
-    // if the config file is corrupted — start fresh
-  }
+  } catch (e) {}
   return { folders: [] }
 }
 
 function saveConfig(config) {
   try {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-  } catch (e) {
-    console.error('Не вдалось зберегти конфіг / Could not save config:', e)
-  }
+  } catch (e) {}
 }
 
-// Рекурсивно обходимо папку і збираємо всі аудіофайли
-// Recursively walk a directory and collect all audio files
 function scanDir(dirPath) {
   let files = []
   try {
@@ -51,36 +41,24 @@ function scanDir(dirPath) {
         files = files.concat(scanDir(fullPath))
       } else if (
         AUDIO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
-        !entry.name.startsWith('._') // ігноруємо macOS сміття / skip macOS junk files
+        !entry.name.startsWith('._')
       ) {
         files.push(fullPath)
       }
     }
-  } catch (e) {
-    // немає прав або битий шлях — тихо пропускаємо
-    // no permissions or broken path — skip silently
-  }
+  } catch (e) {}
   return files
 }
 
-// Витягуємо метадані з одного файлу
-// Extract metadata from a single audio file
 async function parseTrack(filePath) {
   try {
-    const { common, format } = await mm.parseFile(filePath, {
-      duration: true,
-      skipCovers: false
-    })
-
-    // Обкладинку конвертуємо в base64 щоб можна показати в HTML без file:// проблем
-    // Convert cover art to base64 so it works in HTML without file:// issues
+    const { common, format } = await mm.parseFile(filePath, { duration: true, skipCovers: false })
     let cover = null
-    if (common.picture && common.picture.length > 0) {
+    if (common.picture?.length > 0) {
       const pic = common.picture[0]
       const fmt = pic.format.includes('/') ? pic.format : `image/${pic.format}`
       cover = `data:${fmt};base64,${Buffer.from(pic.data).toString('base64')}`
     }
-
     return {
       path:        filePath,
       title:       common.title       || path.basename(filePath, path.extname(filePath)),
@@ -91,9 +69,8 @@ async function parseTrack(filePath) {
       trackNo:     common.track?.no   || 0,
       disc:        common.disk?.no    || 1,
       duration:    format.duration    || 0,
+      genre:       common.genre       || [],
       cover,
-      // Технічна інформація про файл — формат, бітрейт, семплрейт, бітова глибина
-      // Technical file info — format, bitrate, sample rate, bit depth
       quality: {
         container:     format.container     || null,
         codec:         format.codec         || null,
@@ -102,86 +79,50 @@ async function parseTrack(filePath) {
         bitsPerSample: format.bitsPerSample || null,
       }
     }
-  } catch (e) {
-    return null // файл нечитабельний — повертаємо null / unreadable file — return null
-  }
+  } catch (e) { return null }
 }
 
-// ─── IPC — зв'язок між main і renderer (інтерфейсом) ─────────
-// ─── IPC — communication between main process and renderer ───
-
 ipcMain.handle('open-folder-dialog', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory']
-  })
+  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
   return result.canceled ? null : result.filePaths[0]
 })
-
-// Сканування однієї папки — повертає масив треків
-// Scan one folder — returns array of tracks
 ipcMain.handle('scan-folder', async (event, folderPath) => {
-  const files  = scanDir(folderPath)
-  const tracks = []
-  for (const filePath of files) {
-    const track = await parseTrack(filePath)
-    if (track) tracks.push(track)
-  }
+  const files = scanDir(folderPath), tracks = []
+  for (const f of files) { const t = await parseTrack(f); if (t) tracks.push(t) }
   return tracks
 })
-
-// Зберегти список папок в конфіг
-// Save folder list to config
-ipcMain.handle('save-config', (event, config) => {
-  saveConfig(config)
-  return true
-})
-
-// Прочитати конфіг при запуску — щоб знати які папки вже були додані
-// Read config on startup — so we know which folders were already added
-ipcMain.handle('load-config', () => loadConfig())
-
-// При старті сканує всі збережені папки одразу
-// On startup — scans all previously saved folders at once
-ipcMain.handle('scan-saved-folders', async (event, folders) => {
-  const allTracks = []
+ipcMain.handle('save-config',  (_, config) => { saveConfig(config); return true })
+ipcMain.handle('load-config',  () => loadConfig())
+ipcMain.handle('scan-saved-folders', async (_, folders) => {
+  const all = []
   for (const folder of folders) {
-    if (!fs.existsSync(folder)) continue // папка зникла (диск від'єднано і тп) / folder is gone (drive disconnected etc)
-    const files = scanDir(folder)
-    for (const filePath of files) {
-      const track = await parseTrack(filePath)
-      if (track) allTracks.push(track)
-    }
+    if (!fs.existsSync(folder)) continue
+    for (const f of scanDir(folder)) { const t = await parseTrack(f); if (t) all.push(t) }
   }
-  return allTracks
+  return all
 })
-
-// Стандартні кнопки вікна — мінімізація, повноекранний, закрити
-// Standard window buttons — minimize, maximize, close
 ipcMain.on('window-minimize', () => mainWindow.minimize())
-ipcMain.on('window-maximize', () => {
-  mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize()
-})
+ipcMain.on('window-maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize())
 ipcMain.on('window-close',    () => mainWindow.close())
 
-// ─── Вікно ────────────────────────────────────────────────────
-// ─── Window ───────────────────────────────────────────────────
 function createWindow() {
+  // Перевіряємо чи Win11 (build 22000+) — тільки там підтримується acrylic з прозорістю
+  // Check if Win11 (build 22000+) — only there acrylic transparency is supported properly
+  const build   = parseInt(os.release().split('.')[2] || '0')
+  const isWin11 = process.platform === 'win32' && build >= 22000
+
   mainWindow = new BrowserWindow({
-    width:     1300,
-    height:    840,
-    minWidth:  960,
-    minHeight: 600,
-    frame:     false, // прибираємо стандартний тайтлбар Windows / remove default Windows titlebar
-    webPreferences: {
-      nodeIntegration:  true,
-      contextIsolation: false
-    },
-    backgroundColor: '#09090b'
+    width: 1300, height: 840, minWidth: 960, minHeight: 600,
+    frame: false,
+    // Win11: справжнє скло з розмитим робочим столом / Win11: real glass with blurred desktop
+    // Win10: темний непрозорий фон як fallback / Win10: dark opaque background as fallback
+    transparent:        isWin11,
+    backgroundColor:    isWin11 ? '#00000000' : '#0d0d10',
+    backgroundMaterial: isWin11 ? 'acrylic'   : undefined,
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
   })
   mainWindow.loadFile('src/index.html')
 }
 
 app.whenReady().then(createWindow)
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

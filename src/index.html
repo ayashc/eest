@@ -3,571 +3,615 @@
 <head>
 <meta charset="UTF-8">
 <title>Eest</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* =====================================================================
-   Базові змінні — змінюємо тут, змінюється скрізь
-   Base variables — change here, changes everywhere
-   ===================================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Акцент — динамічно міняється під обкладинку */
-  /* Accent — dynamically changes based on album cover */
-  --accent:        124, 106, 247;
-  --accent-hex:    #7c6af7;
-
-  /* Фони — від найтемнішого до трохи світлішого */
-  /* Backgrounds — from darkest to slightly lighter */
-  --bg:    #09090b;
-  --bg2:   #111113;
-  --bg3:   #1a1a1e;
-  --bg4:   #222228;
-
-  /* Скло — напівпрозорі шари для liquid glass ефекту */
-  /* Glass — semi-transparent layers for liquid glass effect */
-  --glass:          rgba(255,255,255,0.038);
-  --glass-2:        rgba(255,255,255,0.065);
-  --glass-border:   rgba(255,255,255,0.07);
-  --glass-border-2: rgba(255,255,255,0.12);
-
-  /* Текст — основний, другорядний, зовсім блідий */
-  /* Text — primary, secondary, ghost */
-  --text:  #f1f0f5;
-  --text2: rgba(241,240,245,0.5);
-  --text3: rgba(241,240,245,0.27);
-
-  /* Розміри лейаута */
-  /* Layout sizes */
-  --sidebar-w: 216px;
-  --player-h:  86px;
-  --bar-h:     38px;
-  --r:         12px;
-  --ease:      cubic-bezier(0.25, 0, 0, 1);
+  --accent:   120, 100, 255;
+  --player-h: 90px;
+  --topbar-h: 52px;
+  --r:        13px;
+  --ease:     cubic-bezier(0.22, 1, 0.36, 1);
+  --g1: rgba(255,255,255,0.04);
+  --g2: rgba(255,255,255,0.07);
+  --g3: rgba(255,255,255,0.11);
+  --gb1: rgba(255,255,255,0.06);
+  --text:  rgba(255,255,255,0.96);
+  --text2: rgba(255,255,255,0.52);
+  --text3: rgba(255,255,255,0.28);
 }
+
+@font-face { font-family:'Fixel'; src:url('../fonts/FixelDisplay-Light.woff2') format('woff2'),url('../fonts/FixelDisplay-Light.otf') format('opentype'); font-weight:300; }
+@font-face { font-family:'Fixel'; src:url('../fonts/FixelDisplay-Regular.woff2') format('woff2'),url('../fonts/FixelDisplay-Regular.otf') format('opentype'); font-weight:400; }
+@font-face { font-family:'Fixel'; src:url('../fonts/FixelDisplay-Medium.woff2') format('woff2'),url('../fonts/FixelDisplay-Medium.otf') format('opentype'); font-weight:500; }
+@font-face { font-family:'Fixel'; src:url('../fonts/FixelDisplay-SemiBold.woff2') format('woff2'),url('../fonts/FixelDisplay-SemiBold.otf') format('opentype'); font-weight:600; }
+@font-face { font-family:'Fixel'; src:url('../fonts/FixelDisplay-Bold.woff2') format('woff2'),url('../fonts/FixelDisplay-Bold.otf') format('opentype'); font-weight:700; }
+@font-face { font-family:'Fixel'; src:url('../fonts/FixelDisplay-ExtraBold.woff2') format('woff2'),url('../fonts/FixelDisplay-ExtraBold.otf') format('opentype'); font-weight:800; }
 
 html, body {
-  width: 100%; height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Outfit', -apple-system, system-ui, sans-serif;
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-  user-select: none;
+  width:100%; height:100%; overflow:hidden;
+  background:transparent;
+  color:var(--text);
+  font-family:'Fixel',-apple-system,system-ui,sans-serif;
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
 }
 
-/* Скролбар — тонкий і непомітний */
-/* Scrollbar — thin and unobtrusive */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.09); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
-
-/* ─── Динамічний фон-блюм за обкладинкою ────────────────────
-   Dynamic bloom background that follows the album cover color  */
+#app-bg {
+  position:fixed; inset:0; z-index:0;
+  background:rgba(10,10,14,0.72);
+  backdrop-filter:blur(48px) saturate(1.6);
+  -webkit-backdrop-filter:blur(48px) saturate(1.6);
+}
 #bg-bloom {
-  position: fixed; inset: 0; z-index: 0;
-  pointer-events: none;
-  transition: background 1.4s var(--ease);
+  position:fixed; inset:0; z-index:1;
+  pointer-events:none;
+  transition:background 1.8s var(--ease);
 }
 
-/* ─── Тайтлбар — кастомний замість стандартного Windows ─────
-   Custom titlebar replacing the default Windows one           */
-#titlebar {
-  position: fixed; top: 0; left: 0; right: 0;
-  height: var(--bar-h);
-  background: rgba(9,9,11,0.75);
-  backdrop-filter: blur(24px);
-  -webkit-app-region: drag; /* ця штука дозволяє тягати вікно / this makes the window draggable */
-  display: flex; align-items: center;
-  padding: 0 14px;
-  z-index: 200;
-  border-bottom: 1px solid var(--glass-border);
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:2px; }
+
+/* ─── Топ-бар ────────────────────────────────────────────────── */
+#topbar {
+  position:fixed; top:0; left:0; right:0;
+  height:var(--topbar-h);
+  background:rgba(10,10,14,0.55);
+  backdrop-filter:blur(32px);
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  display:flex; align-items:center;
+  padding:0 16px 0 18px; gap:8px;
+  z-index:100;
+  -webkit-app-region:drag;
 }
-.app-wordmark {
-  font-size: 12px; font-weight: 800;
-  letter-spacing: 0.22em; text-transform: uppercase;
-  color: var(--text3);
+.app-logo {
+  font-size:13px; font-weight:800; letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--text3); flex-shrink:0; margin-right:4px;
 }
-.win-controls {
-  margin-left: auto; display: flex; gap: 5px;
-  -webkit-app-region: no-drag; /* кнопки не повинні тягати вікно / buttons shouldn't drag the window */
+.tabs { display:flex; gap:2px; -webkit-app-region:no-drag; }
+.tab {
+  padding:6px 14px; border-radius:8px;
+  font-size:13px; font-weight:500;
+  color:var(--text2); cursor:pointer;
+  border:none; background:none; font-family:inherit;
+  transition:background .15s, color .15s;
 }
+.tab:hover  { background:var(--g2); color:var(--text); }
+.tab.active { background:rgba(var(--accent),.18); color:rgba(var(--accent),1); }
+
+.sort-group { display:flex; gap:2px; margin-left:4px; -webkit-app-region:no-drag; }
+.s-btn {
+  padding:5px 11px; border-radius:7px;
+  font-size:12px; font-weight:500; font-family:inherit;
+  color:var(--text3); cursor:pointer;
+  border:1px solid transparent; background:none;
+  transition:background .12s, color .12s, border-color .12s;
+}
+.s-btn:hover  { background:var(--g2); color:var(--text2); }
+.s-btn.active { background:var(--g2); border-color:rgba(255,255,255,.1); color:var(--text); }
+.s-dir {
+  width:28px; height:28px; border-radius:7px;
+  background:none; border:1px solid transparent;
+  color:var(--text3); font-size:13px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .12s, color .12s;
+}
+.s-dir:hover { background:var(--g2); color:var(--text2); }
+
+.topbar-spacer { flex:1; }
+
+/* Кнопка налаштувань */
+#settings-btn {
+  width:32px; height:32px; border-radius:8px;
+  background:none; border:1px solid transparent;
+  color:var(--text2); cursor:pointer; font-size:15px;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .12s, color .12s, border-color .12s;
+  -webkit-app-region:no-drag; flex-shrink:0;
+}
+#settings-btn:hover  { background:var(--g2); border-color:var(--gb1); color:var(--text); }
+#settings-btn.active { background:var(--g2); border-color:rgba(var(--accent),.3); color:rgba(var(--accent),1); }
+
+.win-controls { display:flex; gap:5px; margin-left:8px; -webkit-app-region:no-drag; }
 .win-btn {
-  width: 28px; height: 22px;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  border-radius: 5px; color: var(--text3);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 600;
-  transition: background .15s, color .15s, border-color .15s;
+  width:28px; height:24px; border-radius:6px;
+  background:var(--g1); border:1px solid var(--gb1);
+  color:var(--text3); cursor:pointer; font-size:10px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .12s, color .12s;
 }
-.win-btn:hover { background: var(--glass-2); color: var(--text); border-color: var(--glass-border-2); }
-.win-btn.cls:hover { background: rgba(255,55,55,0.18); color: #ff6b6b; border-color: rgba(255,55,55,0.3); }
+.win-btn:hover     { background:var(--g3); color:var(--text); }
+.win-btn.cls:hover { background:rgba(255,60,60,.22); color:#ff6b6b; }
 
-/* ─── Основний лейаут ────────────────────────────────────────
-   Main layout: sidebar + content area                         */
-#layout {
-  position: fixed;
-  top: var(--bar-h); left: 0; right: 0; bottom: var(--player-h);
-  display: flex; z-index: 1;
+/* ─── Панель налаштувань — вїжджає справа ────────────────────── */
+#settings-panel {
+  position:fixed; top:0; right:0; bottom:0;
+  width:320px; z-index:150;
+  background:rgba(12,12,16,0.82);
+  backdrop-filter:blur(40px) saturate(1.5);
+  border-left:1px solid rgba(255,255,255,0.07);
+  display:flex; flex-direction:column;
+  padding:0;
+  transform:translateX(100%);
+  transition:transform .32s var(--ease);
+}
+#settings-panel.open { transform:translateX(0); }
+
+.sp-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:20px 20px 16px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  flex-shrink:0;
+  /* висота топбару щоб не перекривати */
+  padding-top:calc(var(--topbar-h) + 14px);
+}
+.sp-title { font-size:15px; font-weight:700; }
+.sp-close {
+  width:28px; height:28px; border-radius:7px;
+  background:var(--g2); border:1px solid var(--gb1);
+  color:var(--text2); cursor:pointer; font-size:14px;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .12s;
+}
+.sp-close:hover { background:var(--g3); color:var(--text); }
+
+.sp-body { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:20px; }
+
+.sp-section-label {
+  font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--text3); margin-bottom:10px;
 }
 
-/* ─── Бічна панель ───────────────────────────────────────────
-   Sidebar navigation                                          */
-#sidebar {
-  width: var(--sidebar-w);
-  background: rgba(9,9,11,0.55);
-  backdrop-filter: blur(20px);
-  border-right: 1px solid var(--glass-border);
-  display: flex; flex-direction: column;
-  padding: 16px 10px;
-  flex-shrink: 0; gap: 2px;
-}
-.sb-label {
-  font-size: 10px; font-weight: 700;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--text3); padding: 0 10px;
-  margin: 12px 0 4px;
-}
-.sb-label:first-child { margin-top: 0; }
-.nav-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: 9px;
-  cursor: pointer; color: var(--text2);
-  font-size: 13.5px; font-weight: 500;
-  transition: background .15s, color .15s;
-}
-.nav-item:hover { background: var(--glass); color: var(--text); }
-.nav-item.active { background: rgba(var(--accent),.14); color: rgba(var(--accent),1); }
-.nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
-.sb-spacer { flex: 1; }
-
-/* Кнопка додавання папки внизу сайдбара */
-/* Add folder button at the bottom of the sidebar */
+/* Кнопка додати папку — в налаштуваннях */
 #add-folder-btn {
-  display: flex; align-items: center; gap: 9px;
-  padding: 9px 12px; border-radius: 9px;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  color: var(--text2); cursor: pointer;
-  font-size: 13px; font-weight: 500; font-family: inherit;
-  width: 100%; text-align: left;
-  transition: background .15s, color .15s, border-color .15s;
+  display:flex; align-items:center; gap:8px;
+  padding:10px 14px; border-radius:9px;
+  background:var(--g2); border:1px solid var(--gb1);
+  color:var(--text2); font-size:13px; font-weight:500; font-family:inherit;
+  cursor:pointer; transition:background .12s, color .12s; width:100%;
 }
-#add-folder-btn:hover { background: var(--glass-2); color: var(--text); border-color: var(--glass-border-2); }
+#add-folder-btn:hover { background:var(--g3); color:var(--text); }
 
-/* ─── Контентна зона ─────────────────────────────────────────
-   Content area — shows different views                        */
-#content { flex: 1; position: relative; overflow: hidden; }
-
-/* Кожна "сторінка" — перемикаємо через display */
-/* Each "page" — we toggle via display */
-.view {
-  position: absolute; inset: 0;
-  overflow-y: auto; overflow-x: hidden;
-  padding: 26px; display: none;
+/* Список папок */
+.folder-item {
+  display:flex; align-items:flex-start; gap:10px;
+  padding:10px 12px; border-radius:9px;
+  background:var(--g1); border:1px solid rgba(255,255,255,0.04);
 }
-.view.active { display: block; }
-.view-title {
-  font-size: 20px; font-weight: 700;
-  letter-spacing: -.025em; margin-bottom: 20px;
+.folder-path {
+  flex:1; font-size:12px; color:var(--text2); word-break:break-all;
+  line-height:1.4;
 }
+.folder-remove {
+  background:none; border:none; color:var(--text3);
+  cursor:pointer; font-size:14px; padding:0; flex-shrink:0;
+  transition:color .12s; line-height:1;
+}
+.folder-remove:hover { color:#ff6b6b; }
+.folders-empty { font-size:12px; color:var(--text3); text-align:center; padding:16px 0; }
 
-/* Пустий стан — коли бібліотека ще не додана */
-/* Empty state — when library hasn't been added yet */
+/* ─── Контент ────────────────────────────────────────────────── */
+#content {
+  position:fixed;
+  top:var(--topbar-h); left:0; right:0; bottom:var(--player-h);
+  overflow-y:auto; overflow-x:hidden;
+  z-index:2;
+}
+.view { display:none; padding:24px 22px; }
+.view.active { display:block; }
+
 #empty-state {
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 10px; height: 100%;
-  position: absolute; inset: 0;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:10px; height:60vh;
 }
-.empty-glyph { font-size: 54px; opacity: .18; margin-bottom: 4px; }
-.empty-title { font-size: 16px; font-weight: 600; color: var(--text2); }
-.empty-sub   { font-size: 13px; color: var(--text3); }
+.empty-glyph { font-size:52px; opacity:.12; }
+.empty-title { font-size:16px; font-weight:600; color:var(--text2); }
+.empty-sub   { font-size:13px; color:var(--text3); }
+.empty-sub-action {
+  margin-top:4px; font-size:12px; color:var(--text3);
+  display:flex; align-items:center; gap:6px;
+}
 
-/* Оверлей завантаження під час сканування */
-/* Loading overlay during folder scan */
-#loading-overlay {
-  display: none; /* ховаємо за замовч / hidden by default */
-  position: absolute; inset: 0;
-  background: rgba(9,9,11,0.8);
-  backdrop-filter: blur(8px);
-  z-index: 50;
-  align-items: center; justify-content: center;
-  flex-direction: column; gap: 14px;
-}
-#loading-overlay.visible { display: flex; }
-.spinner {
-  width: 26px; height: 26px;
-  border: 2px solid var(--glass-border);
-  border-top-color: rgba(var(--accent),1);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.loading-text { font-size: 13px; color: var(--text2); }
+.stats-bar { font-size:12px; color:var(--text3); margin-bottom:18px; }
+.stats-bar strong { color:var(--text2); }
 
-/* ─── Грід альбомів ──────────────────────────────────────────
-   Albums grid — auto-fills columns based on available width  */
+/* ─── Грід альбомів ──────────────────────────────────────────── */
 #album-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
-  gap: 18px;
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(158px,1fr));
+  gap:16px;
 }
 .album-card {
-  cursor: pointer; border-radius: var(--r);
-  background: var(--bg3); border: 1px solid var(--glass-border);
-  overflow: hidden;
-  transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s;
-  /* pointer-events завжди активні — це виправляє баг з кліками після відтворення */
-  /* pointer-events always active — this fixes the click bug after playback */
-  pointer-events: all;
+  cursor:pointer; border-radius:var(--r);
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.07);
+  overflow:hidden;
+  transform-style:preserve-3d;
+  transition:box-shadow .3s var(--ease), border-color .3s;
+  will-change:transform; position:relative;
 }
+.album-card::after {
+  content:''; position:absolute; inset:0; border-radius:var(--r);
+  opacity:0; transition:opacity .3s; pointer-events:none;
+  background:radial-gradient(ellipse at 50% 120%, var(--card-glow, rgba(120,100,255,.4)), transparent 70%);
+}
+.album-card:hover::after  { opacity:1; }
 .album-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 44px rgba(0,0,0,0.6);
-  border-color: var(--glass-border-2);
+  border-color:rgba(255,255,255,.14);
+  box-shadow:0 20px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,0.06);
 }
-.album-card:active { transform: translateY(-2px); }
 .album-cover {
-  width: 100%; aspect-ratio: 1;
-  background: var(--bg4);
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
+  width:100%; aspect-ratio:1; background:rgba(255,255,255,0.04);
+  overflow:hidden; position:relative;
+  display:flex; align-items:center; justify-content:center;
 }
-.album-cover img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
-.album-cover-ph  { font-size: 40px; opacity: .18; pointer-events: none; }
-.album-info { padding: 10px 12px 13px; }
-.album-name {
-  font-size: 13px; font-weight: 600; line-height: 1.3;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.album-cover img {
+  width:100%; height:100%; object-fit:cover; display:block;
+  pointer-events:none; transition:transform .4s var(--ease);
 }
-.album-sub  {
-  font-size: 12px; color: var(--text2); margin-top: 2px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.album-year { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.album-card:hover .album-cover img { transform:scale(1.04); }
+.album-cover-ph { font-size:42px; opacity:.12; pointer-events:none; }
 
-/* ─── Деталь альбому ─────────────────────────────────────────
-   Album detail page                                           */
-#view-detail { padding: 0 !important; }
+.album-play-overlay {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0); transition:background .25s;
+}
+.album-card:hover .album-play-overlay { background:rgba(0,0,0,.28); }
+.album-play-btn {
+  width:46px; height:46px; border-radius:50%;
+  background:rgba(255,255,255,0.92);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; color:#111;
+  opacity:0; transform:scale(0.7);
+  transition:opacity .22s, transform .22s var(--ease);
+  box-shadow:0 4px 20px rgba(0,0,0,.4);
+}
+.album-card:hover .album-play-btn { opacity:1; transform:scale(1); }
+.album-info { padding:10px 12px 13px; }
+.album-name { font-size:13px; font-weight:600; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.album-sub  { font-size:12px; color:var(--text2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.album-year { font-size:11px; color:var(--text3); margin-top:2px; }
 
+/* Grouped views */
+.artist-section { margin-bottom:38px; }
+.artist-section-header { display:flex; align-items:center; gap:13px; margin-bottom:14px; padding:4px 0; }
+.artist-section-avatar {
+  width:36px; height:36px; border-radius:50%; overflow:hidden; flex-shrink:0;
+  background:var(--g2); border:1px solid var(--gb1);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; font-weight:700; color:var(--text2);
+}
+.artist-section-avatar img { width:100%; height:100%; object-fit:cover; }
+.artist-section-name  { font-size:18px; font-weight:700; letter-spacing:-.025em; }
+.artist-section-count { font-size:12px; color:var(--text3); margin-top:1px; }
+.year-section-label   { font-size:24px; font-weight:800; letter-spacing:-.04em; color:var(--text2); }
+
+/* ─── Mood ───────────────────────────────────────────────────── */
+#view-mood {
+  display:none;
+  flex-direction:column; align-items:center; justify-content:center;
+  min-height:calc(100vh - var(--topbar-h) - var(--player-h));
+  padding:32px 22px;
+  gap:0;
+}
+#view-mood.active { display:flex; }
+
+.mood-heading {
+  font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--text3); margin-bottom:36px; text-align:center;
+}
+
+.mood-grid {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  width:100%; max-width:560px;
+}
+
+/* Картка настрою — велика, з градієнтом і ефектом */
+.mood-card {
+  position:relative; overflow:hidden;
+  border-radius:18px; cursor:pointer;
+  padding:28px 20px 24px;
+  display:flex; flex-direction:column; gap:8px;
+  border:1px solid rgba(255,255,255,0.08);
+  transition:transform .25s var(--ease), box-shadow .25s var(--ease), border-color .25s;
+  will-change:transform;
+}
+/* Перша картка — широка на два стовпці */
+.mood-card:first-child {
+  grid-column:span 2;
+}
+.mood-card::before {
+  content:''; position:absolute; inset:0;
+  background:var(--mood-bg);
+  opacity:0.18; transition:opacity .25s;
+}
+.mood-card:hover::before { opacity:0.32; }
+.mood-card:hover {
+  transform:translateY(-3px) scale(1.01);
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  border-color:rgba(255,255,255,.14);
+}
+.mood-card:active { transform:scale(.98); }
+
+.mood-icon { font-size:28px; line-height:1; position:relative; z-index:1; }
+.mood-name {
+  font-size:17px; font-weight:700; letter-spacing:-.02em;
+  position:relative; z-index:1;
+}
+.mood-desc {
+  font-size:12px; color:var(--text2); line-height:1.45;
+  position:relative; z-index:1;
+}
+
+
+/* ─── Mood picks — екран з альбомами після вибору настрою ───────
+   Mood picks — album suggestions screen after mood selection      */
+#mood-picks {
+  display:none; flex-direction:column; align-items:center;
+  width:100%; max-width:620px; gap:0;
+}
+#mood-picks.visible { display:flex; }
+
+.mood-picks-back {
+  align-self:flex-start;
+  background:none; border:none; color:var(--text3); cursor:pointer;
+  font-size:13px; font-family:inherit; padding:0 0 24px;
+  display:flex; align-items:center; gap:6px;
+  transition:color .15s;
+}
+.mood-picks-back:hover { color:var(--text); }
+
+.mood-picks-label {
+  font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--text3); margin-bottom:20px; align-self:flex-start;
+}
+
+.mood-pick-grid {
+  display:grid; grid-template-columns:repeat(2,1fr);
+  gap:12px; width:100%;
+}
+
+/* Картка альбому в пропозиціях — горизонтальна, з обкладинкою */
+/* Album suggestion card — horizontal, with cover */
+.mood-pick-card {
+  display:flex; align-items:center; gap:14px;
+  padding:12px 14px; border-radius:14px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.07);
+  cursor:pointer;
+  transition:background .18s, border-color .18s, transform .2s var(--ease), box-shadow .2s;
+}
+.mood-pick-card:hover {
+  background:rgba(255,255,255,0.09);
+  border-color:rgba(255,255,255,.14);
+  transform:translateY(-2px);
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.mood-pick-card:active { transform:scale(.98); }
+
+.mood-pick-cover {
+  width:52px; height:52px; border-radius:9px; flex-shrink:0;
+  overflow:hidden; background:var(--g2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; color:var(--text3);
+}
+.mood-pick-cover img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.mood-pick-info { overflow:hidden; flex:1; }
+.mood-pick-title  { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mood-pick-artist { font-size:12px; color:var(--text2); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mood-pick-year   { font-size:11px; color:var(--text3); margin-top:2px; }
+
+/* Якщо бібліотека порожня — показуємо підказку */
+.mood-empty-hint {
+  margin-top:28px; font-size:12px; color:var(--text3);
+  text-align:center; max-width:320px; line-height:1.6;
+}
+
+/* ─── Songs ──────────────────────────────────────────────────── */
+.song-row {
+  display:flex; align-items:center; gap:13px;
+  padding:7px 10px; border-radius:9px;
+  cursor:pointer; transition:background .12s;
+}
+.song-row:hover    { background:var(--g2); }
+.song-row.playing .song-title-t { color:rgba(var(--accent),1); }
+.song-thumb {
+  width:40px; height:40px; border-radius:7px; overflow:hidden; flex-shrink:0;
+  background:var(--g2); display:flex; align-items:center; justify-content:center;
+  font-size:18px; color:var(--text3);
+}
+.song-thumb img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.song-info    { flex:1; overflow:hidden; }
+.song-title-t { font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.song-meta-t  { font-size:12px; color:var(--text2); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.song-dur-t   { font-size:12px; color:var(--text3); flex-shrink:0; font-variant-numeric:tabular-nums; }
+
+/* ─── Деталь альбому ─────────────────────────────────────────── */
+#view-detail { padding:0 !important; }
 .detail-hero {
-  display: flex; gap: 26px;
-  padding: 28px 28px 22px; position: relative;
+  display:flex; gap:28px; padding:28px 28px 22px; position:relative;
 }
 .detail-art {
-  width: 190px; height: 190px; flex-shrink: 0;
-  border-radius: var(--r); overflow: hidden;
-  box-shadow: 0 22px 64px rgba(0,0,0,0.7);
+  width:196px; height:196px; flex-shrink:0;
+  border-radius:var(--r); overflow:hidden;
+  box-shadow:0 24px 72px rgba(0,0,0,.7);
 }
-.detail-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.detail-art img { width:100%; height:100%; object-fit:cover; display:block; }
 .detail-art-ph {
-  width: 100%; height: 100%; background: var(--bg4);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 56px; opacity: .18;
+  width:100%; height:100%; background:var(--g2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:56px; opacity:.15;
 }
-.detail-meta { display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; overflow: hidden; }
-.detail-type { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text3); }
-.detail-name {
-  font-size: 26px; font-weight: 800; letter-spacing: -.03em; line-height: 1.1;
-  margin-top: 6px;
+.detail-meta { display:flex; flex-direction:column; justify-content:flex-end; gap:3px; overflow:hidden; }
+.detail-type   { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
+.detail-name   { font-size:26px; font-weight:800; letter-spacing:-.03em; line-height:1.1; margin-top:6px; }
+.detail-artist { font-size:15px; font-weight:600; color:rgba(var(--accent),1); margin-top:4px; }
+.detail-extra  { font-size:12px; color:var(--text3); margin-top:4px; }
+.detail-actions { display:flex; gap:9px; margin-top:16px; }
+.btn-play-big {
+  display:flex; align-items:center; gap:8px;
+  padding:10px 22px; border-radius:9px;
+  background:rgba(var(--accent),1); border:none;
+  color:#fff; font-size:14px; font-weight:600; font-family:inherit;
+  cursor:pointer; transition:filter .15s, transform .1s;
 }
-.detail-artist { font-size: 15px; font-weight: 600; color: rgba(var(--accent),1); margin-top: 4px; }
-.detail-extra  { font-size: 12px; color: var(--text3); margin-top: 5px; }
-.detail-actions { display: flex; gap: 9px; margin-top: 16px; }
-
-/* Кнопка Play — основна дія */
-/* Play button — primary action */
-.btn-play {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 22px; border-radius: 8px;
-  background: rgba(var(--accent),1); border: none;
-  color: #fff; font-size: 14px; font-weight: 600; font-family: inherit;
-  cursor: pointer; transition: filter .15s, transform .1s;
-}
-.btn-play:hover  { filter: brightness(1.12); }
-.btn-play:active { transform: scale(.97); }
-
-/* Кнопка Shuffle — вторинна дія */
-/* Shuffle button — secondary action */
+.btn-play-big:hover { filter:brightness(1.15); }
+.btn-play-big:active { transform:scale(.97); }
 .btn-shuf {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 18px; border-radius: 8px;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  color: var(--text2); font-size: 14px; font-weight: 500; font-family: inherit;
-  cursor: pointer; transition: background .15s, color .15s;
+  display:flex; align-items:center; gap:8px;
+  padding:10px 18px; border-radius:9px;
+  background:var(--g2); border:1px solid var(--gb1);
+  color:var(--text2); font-size:14px; font-weight:500; font-family:inherit;
+  cursor:pointer; transition:background .15s, color .15s;
 }
-.btn-shuf:hover { background: var(--glass-2); color: var(--text); }
-
+.btn-shuf:hover { background:var(--g3); color:var(--text); }
 .btn-back {
-  position: absolute; top: 28px; right: 28px;
-  display: flex; align-items: center; gap: 6px;
-  padding: 7px 14px; border-radius: 8px;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  color: var(--text2); font-size: 13px; font-weight: 500; font-family: inherit;
-  cursor: pointer; transition: background .15s, color .15s;
+  position:absolute; top:28px; right:28px;
+  display:flex; align-items:center; gap:6px;
+  padding:7px 14px; border-radius:8px;
+  background:var(--g2); border:1px solid var(--gb1);
+  color:var(--text2); font-size:13px; font-weight:500; font-family:inherit;
+  cursor:pointer; transition:background .15s, color .15s;
 }
-.btn-back:hover { background: var(--glass-2); color: var(--text); }
+.btn-back:hover { background:var(--g3); color:var(--text); }
 
-/* Список треків альбому */
-/* Album track list */
-.track-list    { padding: 4px 16px 32px; }
-.track-divider { height: 1px; background: var(--glass-border); margin: 0 12px 12px; }
-
+.track-divider { height:1px; background:rgba(255,255,255,0.055); margin:0 16px 8px; }
+.track-list    { padding:0 14px 32px; }
 .track-item {
-  display: flex; align-items: center; gap: 14px;
-  padding: 9px 12px; border-radius: 8px;
-  cursor: pointer; transition: background .12s;
+  display:flex; align-items:center; gap:13px;
+  padding:9px 10px; border-radius:8px;
+  cursor:pointer; transition:background .12s;
 }
-.track-item:hover { background: var(--glass); }
-.track-item.playing { background: rgba(var(--accent),.12); }
+.track-item:hover    { background:var(--g2); }
+.track-item.playing  { background:rgba(var(--accent),.13); }
 .track-item.playing .track-title,
-.track-item.playing .track-num { color: rgba(var(--accent),1); }
-.track-num   { width: 22px; text-align: right; font-size: 12px; color: var(--text3); flex-shrink: 0; }
-.track-title { flex: 1; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.track-dur   { font-size: 12px; color: var(--text3); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.track-item.playing .track-num { color:rgba(var(--accent),1); }
+.track-num   { width:22px; text-align:right; font-size:12px; color:var(--text3); flex-shrink:0; }
+.track-title { flex:1; font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.track-dur   { font-size:12px; color:var(--text3); flex-shrink:0; font-variant-numeric:tabular-nums; }
 
-/* ─── Артисти ────────────────────────────────────────────────
-   Artists list                                                */
-.artist-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 9px 12px; border-radius: 9px;
-  cursor: pointer; transition: background .12s;
-}
-.artist-row:hover { background: var(--glass); }
-.artist-avatar {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--bg3); border: 1px solid var(--glass-border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 17px; font-weight: 700; color: var(--text2);
-  flex-shrink: 0;
-}
-.artist-name-t  { font-size: 14px; font-weight: 600; }
-.artist-count-t { font-size: 12px; color: var(--text2); margin-top: 2px; }
-
-/* ─── Пісні ──────────────────────────────────────────────────
-   Songs list                                                  */
-.song-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 8px 12px; border-radius: 8px;
-  cursor: pointer; transition: background .12s;
-}
-.song-row:hover { background: var(--glass); }
-.song-row.playing .song-title-t { color: rgba(var(--accent),1); }
-.song-thumb {
-  width: 40px; height: 40px; border-radius: 7px;
-  overflow: hidden; flex-shrink: 0; background: var(--bg3);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; color: var(--text3);
-}
-.song-thumb img  { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.song-info       { flex: 1; overflow: hidden; }
-.song-title-t    { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.song-meta-t     { font-size: 12px; color: var(--text2); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.song-dur-t      { font-size: 12px; color: var(--text3); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-
-/* ─── Плеєр внизу ────────────────────────────────────────────
-   Bottom player bar                                           */
+/* ─── Плеєр ──────────────────────────────────────────────────── */
 #player {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  height: var(--player-h);
-  background: rgba(9,9,11,0.85);
-  backdrop-filter: blur(32px) saturate(1.5);
-  border-top: 1px solid var(--glass-border);
-  display: flex; align-items: center;
-  padding: 0 20px; gap: 14px;
-  z-index: 100;
+  position:fixed; bottom:0; left:0; right:0;
+  height:var(--player-h);
+  display:flex; align-items:center; padding:0 18px;
+  z-index:100;
+  background:rgba(8,8,12,0.65);
+  backdrop-filter:blur(40px) saturate(1.8);
+  border-top:1px solid rgba(255,255,255,0.07);
 }
-
-/* Ліва частина — обкладинка + назва */
-/* Left part — cover + track name */
-.p-track {
-  display: flex; align-items: center; gap: 13px;
-  width: 250px; flex-shrink: 0; overflow: hidden;
+.p-left {
+  display:flex; align-items:center; gap:12px;
+  width:280px; flex-shrink:0; overflow:hidden;
 }
 .p-cover {
-  width: 52px; height: 52px; border-radius: 9px;
-  overflow: hidden; flex-shrink: 0;
-  background: var(--bg3); border: 1px solid var(--glass-border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; color: var(--text3);
+  width:54px; height:54px; border-radius:9px; overflow:hidden; flex-shrink:0;
+  background:var(--g2); border:1px solid var(--gb1);
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; color:var(--text3);
 }
-.p-cover img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.p-meta      { overflow: hidden; }
-.p-title     { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.p-artist    { font-size: 12px; color: var(--text2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.p-quality   { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
-.q-badge     { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; padding: 2px 6px; border-radius: 4px; background: rgba(var(--accent),0.14); color: rgba(var(--accent),1); text-transform: uppercase; }
-.q-badge.lossless { background: rgba(72,199,116,0.14); color: #48c774; }
-.q-badge.lossy    { background: rgba(255,180,0,0.12);  color: #ffb400; }
-
-/* Центральна частина — кнопки + прогрес */
-/* Center part — controls + progress bar */
-.p-controls {
-  flex: 1; display: flex; flex-direction: column;
-  align-items: center; gap: 7px;
+.p-cover img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.p-info    { overflow:hidden; }
+.p-title   { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.p-artist  { font-size:12px; color:var(--text2); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.p-quality { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+.q-badge {
+  font-size:9.5px; font-weight:700; letter-spacing:.07em;
+  padding:2px 5px; border-radius:4px; text-transform:uppercase;
+  background:rgba(var(--accent),.14); color:rgba(var(--accent),.9);
 }
-.p-btns { display: flex; align-items: center; gap: 14px; }
+.q-badge.lossless { background:rgba(60,200,100,.13); color:#44d77a; }
+.q-badge.lossy    { background:rgba(255,170,0,.1);   color:#ffaa00; }
 
+.p-center {
+  flex:1; display:flex; flex-direction:column;
+  align-items:center; gap:8px; padding:0 20px;
+}
+.p-btns { display:flex; align-items:center; gap:12px; }
 .p-btn {
-  width: 30px; height: 30px;
-  background: none; border: none; color: var(--text2);
-  cursor: pointer; font-size: 16px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .12s, color .12s;
+  width:32px; height:32px; border-radius:50%;
+  background:none; border:none; color:var(--text2); cursor:pointer; font-size:15px;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .12s, color .12s;
 }
-.p-btn:hover { color: var(--text); background: var(--glass); }
-.p-btn.on    { color: rgba(var(--accent),1); } /* активний shuffle/repeat / active shuffle/repeat */
-
+.p-btn:hover { color:var(--text); background:var(--g2); }
+.p-btn.on    { color:rgba(var(--accent),1); }
 .p-btn-play {
-  width: 40px; height: 40px;
-  background: var(--text); border: none; color: var(--bg);
-  border-radius: 50%; cursor: pointer; font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .12s, filter .12s; flex-shrink: 0;
+  width:42px; height:42px; border-radius:50%;
+  background:rgba(255,255,255,.95); border:none; color:#111; cursor:pointer; font-size:16px;
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .12s, filter .12s; flex-shrink:0;
+  box-shadow:0 2px 12px rgba(0,0,0,.35);
 }
-.p-btn-play:hover  { filter: brightness(.88); }
-.p-btn-play:active { transform: scale(.93); }
+.p-btn-play:hover  { filter:brightness(.9); }
+.p-btn-play:active { transform:scale(.92); }
+.p-progress { display:flex; align-items:center; gap:9px; width:100%; max-width:440px; }
+.p-time { font-size:11px; color:var(--text3); width:32px; font-variant-numeric:tabular-nums; }
+.p-time.r { text-align:right; }
+.prog-track { flex:1; height:3px; background:rgba(255,255,255,.1); border-radius:2px; cursor:pointer; position:relative; }
+.prog-fill  { height:100%; border-radius:2px; width:0%; background:rgba(255,255,255,.45); pointer-events:none; transition:background .4s; }
+.prog-track:hover .prog-fill { background:rgba(var(--accent),1); }
+.p-right { width:180px; flex-shrink:0; display:flex; align-items:center; gap:8px; justify-content:flex-end; }
+.vol-icon { background:none; border:none; color:var(--text2); cursor:pointer; font-size:14px; padding:2px; transition:color .12s; flex-shrink:0; }
+.vol-icon:hover { color:var(--text); }
+.vol-slider { -webkit-appearance:none; appearance:none; width:90px; height:3px; background:rgba(255,255,255,.1); border-radius:2px; cursor:pointer; outline:none; }
+.vol-slider::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:rgba(255,255,255,.9); transition:transform .1s; }
+.vol-slider:hover::-webkit-slider-thumb { transform:scale(1.25); }
 
-/* Прогрес-бар — клікабельний */
-/* Progress bar — clickable */
-.p-progress {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; max-width: 480px;
+/* ─── Оверлей завантаження ───────────────────────────────────── */
+#loading-overlay {
+  display:none; position:fixed; inset:0; z-index:200;
+  background:rgba(8,8,12,0.75); backdrop-filter:blur(12px);
+  align-items:center; justify-content:center; flex-direction:column; gap:14px;
 }
-.p-time { font-size: 11px; color: var(--text3); width: 34px; font-variant-numeric: tabular-nums; }
-.p-time.r { text-align: right; }
+#loading-overlay.visible { display:flex; }
+.spinner { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,.08); border-top-color:rgba(var(--accent),1); animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { font-size:13px; color:var(--text2); }
 
-.prog-track {
-  flex: 1; height: 3px; background: rgba(255,255,255,.1);
-  border-radius: 2px; cursor: pointer; position: relative;
-}
-.prog-fill {
-  height: 100%; border-radius: 2px;
-  background: rgba(255,255,255,.55); width: 0%;
-  pointer-events: none; transition: background .3s;
-}
-.prog-track:hover .prog-fill { background: rgba(var(--accent),1); }
-
-/* Права частина — гучність */
-/* Right part — volume */
-.p-right {
-  width: 150px; flex-shrink: 0;
-  display: flex; align-items: center; gap: 9px; justify-content: flex-end;
-}
-.vol-btn {
-  background: none; border: none; color: var(--text2);
-  cursor: pointer; font-size: 16px; padding: 2px;
-  transition: color .12s;
-}
-.vol-btn:hover { color: var(--text); }
-.vol-slider {
-  -webkit-appearance: none;
-  width: 86px; height: 3px;
-  background: rgba(255,255,255,.1); border-radius: 2px;
-  cursor: pointer; outline: none;
-}
-.vol-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px; height: 12px;
-  border-radius: 50%; background: var(--text);
-  transition: transform .1s;
-}
-.vol-slider:hover::-webkit-slider-thumb { transform: scale(1.2); }
-
-
-/* ─── Sort bar — рядок сортування зверху видів ───────
-   Sort bar — sorting controls at the top of each view  */
-.sort-bar {
-  display: flex; align-items: center; gap: 6px;
-  margin-bottom: 18px; flex-wrap: wrap;
-}
-.sort-label { font-size: 11px; color: var(--text3); margin-right: 4px; text-transform: uppercase; letter-spacing: .08em; }
-.sort-btn {
-  padding: 4px 11px; border-radius: 20px;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  color: var(--text2); font-size: 12px; font-weight: 500; font-family: inherit;
-  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
-}
-.sort-btn:hover  { background: var(--glass-2); color: var(--text); }
-.sort-btn.active { background: rgba(var(--accent),.16); border-color: rgba(var(--accent),.3); color: rgba(var(--accent),1); }
-.sort-dir {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--glass); border: 1px solid var(--glass-border);
-  color: var(--text2); font-size: 13px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .12s, color .12s; margin-left: 2px;
-}
-.sort-dir:hover { background: var(--glass-2); color: var(--text); }
-
-
-/* ─── Stats bar — загальна статистика зверху видів ─────────
-   Stats bar — total count + duration at the top of views    */
-.stats-bar {
-  font-size: 12px; color: var(--text3);
-  margin-bottom: 16px; letter-spacing: .02em;
-}
-.stats-bar strong { color: var(--text2); font-weight: 600; }
-
-/* ─── Grouped albums — артист як заголовок секції ───────────
-   Grouped albums — artist as section header                  */
-.artist-section { margin-bottom: 36px; }
-.artist-section-header {
-  display: flex; align-items: center; gap: 14px;
-  margin-bottom: 14px; cursor: pointer;
-  padding: 6px 0;
-}
-.artist-section-header:hover .artist-section-name { color: var(--text); }
-.artist-section-avatar {
-  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-  overflow: hidden; background: var(--bg3);
-  border: 1px solid var(--glass-border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; color: var(--text2);
-}
-.artist-section-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.artist-section-name {
-  font-size: 17px; font-weight: 700; letter-spacing: -.02em;
-  color: var(--text2); transition: color .15s;
-}
-.artist-section-count { font-size: 12px; color: var(--text3); margin-top: 1px; }
-
-/* ─── Artists index — алфавітний список для швидкого переходу
-   Artists index — compact alphabetical list for quick jump   */
-.artist-idx-item {
-  display: flex; align-items: center; gap: 11px;
-  padding: 7px 10px; border-radius: 8px;
-  cursor: pointer; transition: background .12s;
-}
-.artist-idx-item:hover { background: var(--glass); }
-.artist-idx-avatar {
-  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-  overflow: hidden; background: var(--bg3);
-  border: 1px solid var(--glass-border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; color: var(--text2);
-}
-.artist-idx-avatar img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.artist-idx-name { font-size: 13.5px; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.artist-idx-count { font-size: 11px; color: var(--text3); flex-shrink: 0; }
-
-/* Прихований canvas для витягування кольору з обкладинки */
-/* Hidden canvas for extracting dominant color from cover art */
-#color-canvas { position: fixed; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+#color-canvas { position:fixed; opacity:0; pointer-events:none; width:1px; height:1px; }
 </style>
 </head>
 <body>
 
-<canvas id="color-canvas" width="64" height="64"></canvas>
+<div id="app-bg"></div>
 <div id="bg-bloom"></div>
+<canvas id="color-canvas" width="64" height="64"></canvas>
 
-<!-- Кастомний тайтлбар замість стандартного Windows -->
-<!-- Custom titlebar replacing default Windows one -->
-<div id="titlebar">
-  <span class="app-wordmark">eest</span>
+<!-- ─── Топ-бар ─────────────────────────────────────────────── -->
+<div id="topbar">
+  <span class="app-logo">eest</span>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="albums" onclick="switchTab('albums',this)">Albums</button>
+    <button class="tab"        data-tab="songs"  onclick="switchTab('songs',this)">Songs</button>
+    <button class="tab"        data-tab="mood"   onclick="switchTab('mood',this)">Mood</button>
+  </div>
+
+  <div class="sort-group" id="sort-albums">
+    <button class="s-btn active" id="alb-btn-title"  onclick="sortAlbums('title',this)">Title</button>
+    <button class="s-btn"        id="alb-btn-artist" onclick="sortAlbums('artist',this)">Artist</button>
+    <button class="s-btn"        id="alb-btn-year"   onclick="sortAlbums('year',this)">Year</button>
+    <button class="s-dir"        id="alb-dir"        onclick="flipDir('alb')">↑</button>
+  </div>
+  <div class="sort-group" id="sort-songs" style="display:none">
+    <button class="s-btn active" onclick="sortSongs('title',this)">Title</button>
+    <button class="s-btn"        onclick="sortSongs('artist',this)">Artist</button>
+    <button class="s-btn"        onclick="sortSongs('album',this)">Album</button>
+    <button class="s-btn"        onclick="sortSongs('duration',this)">Duration</button>
+    <button class="s-dir"        id="sng-dir" onclick="flipDir('sng')">↑</button>
+  </div>
+
+  <div class="topbar-spacer"></div>
+
+  <button id="settings-btn" onclick="toggleSettings()" title="Налаштування">⚙</button>
+
   <div class="win-controls">
     <button class="win-btn"     onclick="ipc.send('window-minimize')">—</button>
     <button class="win-btn"     onclick="ipc.send('window-maximize')">❐</button>
@@ -575,145 +619,151 @@ html, body {
   </div>
 </div>
 
-<!-- Основний лейаут: сайдбар + контент -->
-<!-- Main layout: sidebar + content -->
-<div id="layout">
-  <aside id="sidebar">
-    <div class="sb-label">Бібліотека</div>
-    <div class="nav-item active" data-view="albums"  onclick="navTo('albums',this)">
-      <span class="nav-icon">▦</span> Albums
+<!-- ─── Панель налаштувань ──────────────────────────────────── -->
+<div id="settings-panel">
+  <div class="sp-header">
+    <span class="sp-title">Налаштування</span>
+    <button class="sp-close" onclick="toggleSettings()">✕</button>
+  </div>
+  <div class="sp-body">
+    <div>
+      <div class="sp-section-label">Музична бібліотека</div>
+      <button id="add-folder-btn" onclick="addFolder()">
+        <span style="font-size:16px">＋</span> Додати папку
+      </button>
     </div>
-    <div class="nav-item" data-view="artists" onclick="navTo('artists',this)">
-      <span class="nav-icon">♪</span> Artists
-    </div>
-    <div class="nav-item" data-view="songs"   onclick="navTo('songs',this)">
-      <span class="nav-icon">≡</span> Songs
-    </div>
-    <div class="sb-spacer"></div>
-    <button id="add-folder-btn" onclick="addFolder()">
-      <span>＋</span> Add Folder
-    </button>
-  </aside>
-
-  <main id="content">
-    <!-- Альбоми -->
-    <!-- Albums -->
-    <div id="view-albums" class="view active">
-      <div id="empty-state">
-        <div class="empty-glyph">♫</div>
-        <div class="empty-title">Бібліотека порожня</div>
-        <div class="empty-sub">Натисни "Add Folder" щоб додати музику</div>
-      </div>
-      <div id="albums-header" style="display:none">
-        <div class="sort-bar">
-          <span class="sort-label">View</span>
-          <button class="sort-btn active" id="alb-btn-title"  onclick="sortAlbums('title',this)">Title</button>
-          <button class="sort-btn"        id="alb-btn-artist" onclick="sortAlbums('artist',this)">By Artist</button>
-          <button class="sort-btn"        id="alb-btn-year"   onclick="sortAlbums('year',this)">By Year</button>
-          <button class="sort-dir" id="alb-dir" onclick="flipDir('alb')" title="Reverse">↑</button>
-        </div>
-        <div class="stats-bar" id="alb-stats"></div>
-      </div>
-      <div id="album-grid"></div>
-    </div>
-
-    <!-- Артисти -->
-    <!-- Artists -->
-    <div id="view-artists" class="view">
-      <div class="sort-bar">
-        <span class="sort-label">Sort</span>
-        <button class="sort-btn active" onclick="sortArtists('name',this)">Name</button>
-        <button class="sort-btn" onclick="sortArtists('albums',this)">Albums</button>
-        <button class="sort-btn" onclick="sortArtists('songs',this)">Songs</button>
-        <button class="sort-dir" id="art-dir" onclick="flipDir('art')" title="Reverse">↑</button>
-      </div>
-      <div class="stats-bar" id="art-stats"></div>
-      <div id="artist-list"></div>
-    </div>
-
-    <!-- Пісні -->
-    <!-- Songs -->
-    <div id="view-songs" class="view">
-      <div class="sort-bar">
-        <span class="sort-label">Sort</span>
-        <button class="sort-btn active" onclick="sortSongs('title',this)">Title</button>
-        <button class="sort-btn" onclick="sortSongs('artist',this)">Artist</button>
-        <button class="sort-btn" onclick="sortSongs('album',this)">Album</button>
-        <button class="sort-btn" onclick="sortSongs('duration',this)">Duration</button>
-        <button class="sort-dir" id="sng-dir" onclick="flipDir('sng')" title="Reverse">↑</button>
-      </div>
-      <div class="stats-bar" id="sng-stats"></div>
-      <div id="song-list"></div>
-    </div>
-
-    <!-- Артист — показується при кліку на артиста -->
-    <!-- Artist detail — shown when clicking an artist -->
-    <div id="view-artist" class="view">
-      <div class="detail-hero" style="align-items:flex-start">
-        <div class="detail-art" id="ar-art" style="width:150px;height:150px;border-radius:50%;flex-shrink:0"></div>
-        <div class="detail-meta" style="justify-content:center">
-          <div class="detail-type">Artist</div>
-          <div class="detail-name" id="ar-name"></div>
-          <div class="detail-extra" id="ar-info"></div>
-        </div>
-        <button class="btn-back" onclick="goBackArtist()">← Back</button>
-      </div>
-      <div class="track-divider"></div>
-      <div style="padding:0 26px 8px">
-        <div class="view-title" style="font-size:15px;margin-bottom:14px">Albums</div>
-        <div id="ar-album-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:16px"></div>
+    <div>
+      <div class="sp-section-label">Додані папки</div>
+      <div id="folders-list">
+        <div class="folders-empty">Папок ще немає</div>
       </div>
     </div>
-
-    <!-- Деталь альбому — показується при кліку на картку -->
-    <!-- Album detail — shown when clicking an album card -->
-    <div id="view-detail" class="view">
-      <div class="detail-hero" id="detail-hero">
-        <div class="detail-art" id="d-art"></div>
-        <div class="detail-meta">
-          <div class="detail-type">Album</div>
-          <div class="detail-name"  id="d-title"></div>
-          <div class="detail-artist" id="d-artist"></div>
-          <div class="detail-extra"  id="d-info"></div>
-          <div class="detail-actions">
-            <button class="btn-play" onclick="albumPlay(false)">▶ &nbsp;Play</button>
-            <button class="btn-shuf" onclick="albumPlay(true)">⇀ &nbsp;Shuffle</button>
-          </div>
-        </div>
-        <button class="btn-back" onclick="goBack()">← Back</button>
-      </div>
-      <div class="track-divider"></div>
-      <div class="track-list" id="d-tracks"></div>
-    </div>
-
-    <!-- Оверлей сканування -->
-    <!-- Scan overlay -->
-    <div id="loading-overlay">
-      <div class="spinner"></div>
-      <div class="loading-text" id="loading-text">Сканування…</div>
-    </div>
-  </main>
+  </div>
 </div>
 
-<!-- Плеєр внизу -->
-<!-- Bottom player bar -->
-<div id="player">
-  <div class="p-track">
-    <div class="p-cover" id="p-cover">♫</div>
-    <div class="p-meta">
-      <div class="p-title"  id="p-title">Нічого не грає</div>
-      <div class="p-artist" id="p-artist">—</div>
-      <div class="p-quality" id="p-quality"></div>
+<!-- ─── Контент ─────────────────────────────────────────────── -->
+<div id="content">
+
+  <!-- Albums -->
+  <div id="view-albums" class="view active">
+    <div id="empty-state">
+      <div class="empty-glyph">♫</div>
+      <div class="empty-title">Бібліотека порожня</div>
+      <div class="empty-sub">Відкрий налаштування і додай папку з музикою</div>
+      <div class="empty-sub-action">
+        <span style="opacity:.4">↗ кнопка</span>
+        <span style="font-size:15px; opacity:.4">⚙</span>
+        <span style="opacity:.4">в правому куті</span>
+      </div>
+    </div>
+    <div id="alb-stats" class="stats-bar" style="display:none"></div>
+    <div id="album-grid" style="display:none"></div>
+  </div>
+
+  <!-- Songs -->
+  <div id="view-songs" class="view">
+    <div id="sng-stats" class="stats-bar"></div>
+    <div id="song-list"></div>
+  </div>
+
+  <!-- Mood -->
+  <div id="view-mood" class="view">
+    <div class="mood-heading">Як ти зараз?</div>
+    <div class="mood-grid">
+
+      <div class="mood-card" data-mood="chill"
+           style="--mood-bg:linear-gradient(135deg,#6ee7f7,#4f8ef7)"
+           onclick="playMood('chill')">
+        <div class="mood-icon">🌊</div>
+        <div class="mood-name">Розслаблено</div>
+        <div class="mood-desc">Холодні відтінки, повільний темп. Щоб просто бути.</div>
+      </div>
+
+      <div class="mood-card" data-mood="focus"
+           style="--mood-bg:linear-gradient(135deg,#a78bfa,#7c3aed)"
+           onclick="playMood('focus')">
+        <div class="mood-icon">🔮</div>
+        <div class="mood-name">Фокус</div>
+        <div class="mood-desc">Без відволікань.</div>
+      </div>
+
+      <div class="mood-card" data-mood="energy"
+           style="--mood-bg:linear-gradient(135deg,#f97316,#ef4444)"
+           onclick="playMood('energy')">
+        <div class="mood-icon">⚡</div>
+        <div class="mood-name">Енергія</div>
+        <div class="mood-desc">Яскраві теплі обкладинки, драйв.</div>
+      </div>
+
+      <div class="mood-card" data-mood="melancholy"
+           style="--mood-bg:linear-gradient(135deg,#475569,#1e293b)"
+           onclick="playMood('melancholy')">
+        <div class="mood-icon">🌧</div>
+        <div class="mood-name">Меланхолія</div>
+        <div class="mood-desc">Темні тони. Для тих вечорів.</div>
+      </div>
+
+      <div class="mood-card" data-mood="random"
+           style="--mood-bg:linear-gradient(135deg,#34d399,#059669)"
+           onclick="playMood('random')">
+        <div class="mood-icon">🎲</div>
+        <div class="mood-name">Сюрприз</div>
+        <div class="mood-desc">Хай вирішить доля.</div>
+      </div>
+
+    </div>
+    <div class="mood-empty-hint" id="mood-hint" style="display:none">
+      Додай папку з музикою щоб Mood міг підібрати альбом
+    </div>
+
+    <!-- Пропозиції альбомів після вибору настрою -->
+    <!-- Album suggestions after mood selection -->
+    <div id="mood-picks">
+      <button class="mood-picks-back" onclick="backToMoodGrid()">← Інший настрій</button>
+      <div class="mood-picks-label" id="mood-picks-label">Обери альбом</div>
+      <div class="mood-pick-grid" id="mood-pick-grid"></div>
     </div>
   </div>
 
-  <div class="p-controls">
+  <!-- Album detail -->
+  <div id="view-detail" class="view">
+    <div class="detail-hero">
+      <div class="detail-art" id="d-art"></div>
+      <div class="detail-meta">
+        <div class="detail-type">Album</div>
+        <div class="detail-name"   id="d-title"></div>
+        <div class="detail-artist" id="d-artist"></div>
+        <div class="detail-extra"  id="d-info"></div>
+        <div class="detail-actions">
+          <button class="btn-play-big" onclick="albumPlay(false)">▶ &nbsp;Play</button>
+          <button class="btn-shuf"     onclick="albumPlay(true)">⇀ &nbsp;Shuffle</button>
+        </div>
+      </div>
+      <button class="btn-back" onclick="goBack()">← Back</button>
+    </div>
+    <div class="track-divider"></div>
+    <div class="track-list" id="d-tracks"></div>
+  </div>
+
+</div>
+
+<!-- ─── Плеєр ─────────────────────────────────────────────── -->
+<div id="player">
+  <div class="p-left">
+    <div class="p-cover" id="p-cover">♫</div>
+    <div class="p-info">
+      <div class="p-title"   id="p-title">Нічого не грає</div>
+      <div class="p-artist"  id="p-artist">—</div>
+      <div class="p-quality" id="p-quality"></div>
+    </div>
+  </div>
+  <div class="p-center">
     <div class="p-btns">
-      <button class="p-btn" id="btn-shuf" title="Shuffle"   onclick="toggleShuffle()">⇌</button>
-      <button class="p-btn"               title="Previous"  onclick="prevTrack()">⏮</button>
-      <button class="p-btn-play" id="btn-play"              onclick="togglePlay()">▶</button>
-      <button class="p-btn"               title="Next"      onclick="nextTrack()">⏭</button>
-      <button class="p-btn" id="btn-rep"  title="Repeat"    onclick="toggleRepeat()">↺</button>
+      <button class="p-btn" id="btn-shuf" onclick="toggleShuffle()" title="Shuffle">⇌</button>
+      <button class="p-btn"               onclick="prevTrack()"     title="Previous">⏮</button>
+      <button class="p-btn-play" id="btn-play" onclick="togglePlay()">▶</button>
+      <button class="p-btn"               onclick="nextTrack()"     title="Next">⏭</button>
+      <button class="p-btn" id="btn-rep"  onclick="toggleRepeat()"  title="Repeat">↺</button>
     </div>
     <div class="p-progress">
       <span class="p-time"   id="t-cur">0:00</span>
@@ -723,12 +773,16 @@ html, body {
       <span class="p-time r" id="t-dur">0:00</span>
     </div>
   </div>
-
   <div class="p-right">
-    <button class="vol-btn" id="vol-icon" onclick="toggleMute()">🔊</button>
-    <input  class="vol-slider" type="range" id="vol" min="0" max="1" step="0.01" value="1"
-            oninput="setVol(this.value)">
+    <button class="vol-icon" id="vol-icon" onclick="toggleMute()">🔊</button>
+    <input class="vol-slider" type="range" id="vol" min="0" max="1" step="0.01" value="1"
+           oninput="setVol(this.value)">
   </div>
+</div>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Сканування…</div>
 </div>
 
 <audio id="audio"></audio>
@@ -737,776 +791,551 @@ html, body {
 'use strict'
 const { ipcRenderer: ipc } = require('electron')
 
-// ─── Стан програми ────────────────────────────────────────────
-// ─── App state ────────────────────────────────────────────────
+let library  = []
+let albums   = {}
+let folders  = []
+let queue    = []
+let qIdx     = 0
+let shuffle  = false
+let repeat   = 0
+let curAlbum = null
+let backTab  = 'albums'
+let nowPath  = null
+let settingsOpen = false
 
-let library   = []   // всі треки бібліотеки / all library tracks
-let albums    = {}   // { key: albumObj } — згрупована бібліотека / grouped library
-let folders   = []   // збережені папки / saved folders
-let queue     = []   // поточна черга відтворення / current playback queue
-let qIdx      = 0    // індекс в черзі / queue position
-let shuffle   = false
-let repeat    = 0    // 0=вимк 1=всі 2=один / 0=off 1=all 2=one
-let curAlbum  = null // ключ відкритого альбому / currently open album key
-let backView  = 'albums' // куди повертатись з деталі / where to go back from detail
-let nowPath   = null // шлях файлу що грає / currently playing file path
+// Кольори кожного альбому — кешуємо щоб не перераховувати кожен раз
+// Album color cache — so we don't recompute every time
+const albumColorCache = {}
 
-// Стан сортування для кожного виду — ключ і напрямок
-// Sort state for each view — key and direction
 const sortState = {
-  alb: { key: 'title',  asc: true },
-  art: { key: 'name',   asc: true },
-  sng: { key: 'title',  asc: true },
+  alb: { key: 'title', asc: true },
+  sng: { key: 'title', asc: true },
 }
 
 const audio = document.getElementById('audio')
+const qs    = s => document.querySelector(s)
+const qsa   = s => document.querySelectorAll(s)
+const fmt   = s => (!s||isNaN(s)) ? '0:00' : `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
+const fmtTotal = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h>0?`${h}г ${m}хв`:`${m}хв` }
+const escHtml  = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
-// ─── Утиліти ──────────────────────────────────────────────────
-// ─── Utilities ────────────────────────────────────────────────
-
-// Секунди → "3:45" формат / Seconds → "3:45" format
-const fmt = s => {
-  if (!s || isNaN(s)) return '0:00'
-  return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
-}
-
-// Форматуємо загальну тривалість у зручний вигляд
-// Format total duration into human-readable form
-const fmtTotal = sec => {
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  if (h > 0) return `${h} год ${m} хв`
-  return `${m} хв`
-}
-
-const qs  = s => document.querySelector(s)
-const qsa = s => document.querySelectorAll(s)
-
-// ─── Старт — завантажуємо збережені папки ────────────────────
-// ─── Startup — load saved folders ────────────────────────────
+// ─── Ініціалізація ────────────────────────────────────────────
 async function init() {
   const config = await ipc.invoke('load-config')
   folders = config.folders || []
-
+  renderFoldersList()
   if (folders.length > 0) {
     showLoading('Завантаження бібліотеки…')
-    const tracks = await ipc.invoke('scan-saved-folders', folders)
-    library = tracks
+    library = await ipc.invoke('scan-saved-folders', folders)
     buildAlbums()
-    renderGrid()
-    renderArtists()
-    renderSongs()
+    renderGrid(); renderSongs()
     hideLoading()
   }
 }
 
-// ─── Акцентний колір із обкладинки ───────────────────────────
-// ─── Dominant color extraction from cover art ────────────────
-
-// Витягуємо домінантний колір і застосовуємо як акцент і bloom
-// Extract dominant color and apply as accent color + background bloom
-function applyColorFromImage(imgEl) {
-  try {
-    const cv  = document.getElementById('color-canvas')
-    const ctx = cv.getContext('2d')
-    ctx.drawImage(imgEl, 0, 0, 64, 64)
-    const px = ctx.getImageData(0,0,64,64).data
-
-    let r=0, g=0, b=0, n=0
-    for (let i = 0; i < px.length; i += 8) {
-      const br  = (px[i]+px[i+1]+px[i+2]) / 3
-      const sat = Math.max(px[i],px[i+1],px[i+2]) - Math.min(px[i],px[i+1],px[i+2])
-      // Беремо тільки кольорові пікселі — не чорні і не білі
-      // Only take colorful pixels — skip blacks and whites
-      if (br > 28 && br < 218 && sat > 18) {
-        r += px[i]; g += px[i+1]; b += px[i+2]; n++
-      }
-    }
-    if (n === 0) return
-
-    r = Math.floor(r/n); g = Math.floor(g/n); b = Math.floor(b/n)
-
-    // Трохи насичуємо щоб колір виглядав живіше
-    // Boost saturation so the color looks more vivid
-    const boost = 1.45
-    r = Math.min(255, Math.floor(128 + (r-128)*boost))
-    g = Math.min(255, Math.floor(128 + (g-128)*boost))
-    b = Math.min(255, Math.floor(128 + (b-128)*boost))
-
-    document.documentElement.style.setProperty('--accent', `${r},${g},${b}`)
-    document.documentElement.style.setProperty('--accent-hex', `rgb(${r},${g},${b})`)
-
-    // Bloom — ледь помітне сяйво у куті екрану
-    // Bloom — a subtle glow in the corner of the screen
-    qs('#bg-bloom').style.background =
-      `radial-gradient(ellipse 80% 50% at 20% 110%, rgba(${r},${g},${b},0.11), transparent)`
-  } catch(e) {
-    // canvas може кинути security error на деяких форматах — ігноруємо
-    // canvas may throw security errors on some formats — ignore
-  }
+// ─── Налаштування — панель ────────────────────────────────────
+function toggleSettings() {
+  settingsOpen = !settingsOpen
+  qs('#settings-panel').classList.toggle('open', settingsOpen)
+  qs('#settings-btn').classList.toggle('active', settingsOpen)
 }
 
-// Чекаємо поки картинка завантажиться, потім витягуємо колір
-// Wait for image to load, then extract color
-function extractColor(imgEl) {
-  if (!imgEl) return
-  if (imgEl.complete && imgEl.naturalWidth > 0) {
-    applyColorFromImage(imgEl)
-  } else {
-    imgEl.addEventListener('load', () => applyColorFromImage(imgEl), { once: true })
+function renderFoldersList() {
+  const list = qs('#folders-list')
+  if (!folders.length) {
+    list.innerHTML = '<div class="folders-empty">Папок ще немає</div>'
+    return
   }
+  list.innerHTML = ''
+  folders.forEach((f, i) => {
+    const item = document.createElement('div')
+    item.className = 'folder-item'
+    item.innerHTML = `
+      <div class="folder-path">${escHtml(f)}</div>
+      <button class="folder-remove" title="Видалити" onclick="removeFolder(${i})">✕</button>`
+    list.appendChild(item)
+  })
 }
 
-// ─── Сканування папки ─────────────────────────────────────────
-// ─── Folder scanning ──────────────────────────────────────────
-async function addFolder() {
-  const folder = await ipc.invoke('open-folder-dialog')
-  if (!folder) return
-
-  // Не додаємо ту саму папку двічі
-  // Don't add the same folder twice
-  if (folders.includes(folder)) return
-
-  showLoading('Сканування папки…')
-  const tracks = await ipc.invoke('scan-folder', folder)
-
-  // Додаємо нові треки, не дублюємо вже існуючі
-  // Add new tracks, don't duplicate existing ones
-  const existing = new Set(library.map(t => t.path))
-  const fresh    = tracks.filter(t => !existing.has(t.path))
-  library = [...library, ...fresh]
-
-  // Запам'ятовуємо папку і зберігаємо конфіг
-  // Remember the folder and save config
-  folders.push(folder)
+async function removeFolder(idx) {
+  folders.splice(idx, 1)
   await ipc.invoke('save-config', { folders })
-
-  buildAlbums()
-  renderGrid()
-  renderArtists()
-  renderSongs()
+  // Ресканим бібліотеку без видаленої папки
+  // Rescan library without the removed folder
+  showLoading('Оновлення бібліотеки…')
+  library = await ipc.invoke('scan-saved-folders', folders)
+  buildAlbums(); renderGrid(); renderSongs()
+  renderFoldersList()
   hideLoading()
 }
 
-// ─── Групуємо треки в альбоми ─────────────────────────────────
-// ─── Group tracks into albums ─────────────────────────────────
+// ─── Сканування ───────────────────────────────────────────────
+async function addFolder() {
+  const folder = await ipc.invoke('open-folder-dialog')
+  if (!folder || folders.includes(folder)) return
+  showLoading('Сканування папки…')
+  const tracks   = await ipc.invoke('scan-folder', folder)
+  const existing = new Set(library.map(t => t.path))
+  library = [...library, ...tracks.filter(t => !existing.has(t.path))]
+  folders.push(folder)
+  await ipc.invoke('save-config', { folders })
+  buildAlbums(); renderGrid(); renderSongs()
+  renderFoldersList()
+  hideLoading()
+}
+
+// ─── Акцентний колір ──────────────────────────────────────────
+function getRGBFromImage(imgEl) {
+  try {
+    const cv = qs('#color-canvas'), ctx = cv.getContext('2d')
+    ctx.drawImage(imgEl, 0, 0, 64, 64)
+    const px = ctx.getImageData(0,0,64,64).data
+    let r=0,g=0,b=0,n=0
+    for (let i=0; i<px.length; i+=8) {
+      const br=(px[i]+px[i+1]+px[i+2])/3
+      const sat=Math.max(px[i],px[i+1],px[i+2])-Math.min(px[i],px[i+1],px[i+2])
+      if (br>28&&br<218&&sat>18) { r+=px[i];g+=px[i+1];b+=px[i+2];n++ }
+    }
+    if (!n) return null
+    const boost=1.45
+    return {
+      r: Math.min(255,Math.floor(128+(Math.floor(r/n)-128)*boost)),
+      g: Math.min(255,Math.floor(128+(Math.floor(g/n)-128)*boost)),
+      b: Math.min(255,Math.floor(128+(Math.floor(b/n)-128)*boost)),
+    }
+  } catch(e) { return null }
+}
+
+function applyColorFromImage(imgEl) {
+  const c = getRGBFromImage(imgEl)
+  if (!c) return
+  document.documentElement.style.setProperty('--accent', `${c.r},${c.g},${c.b}`)
+  qs('#bg-bloom').style.background =
+    `radial-gradient(ellipse 80% 50% at 15% 110%, rgba(${c.r},${c.g},${c.b},0.13), transparent)`
+}
+
+function extractColor(imgEl) {
+  if (!imgEl) return
+  if (imgEl.complete && imgEl.naturalWidth > 0) applyColorFromImage(imgEl)
+  else imgEl.addEventListener('load', () => applyColorFromImage(imgEl), { once: true })
+}
+
+// Витягуємо і кешуємо колір альбому для Mood
+// Extract and cache album color for Mood feature
+function cacheAlbumColor(key, imgSrc) {
+  if (albumColorCache[key] || !imgSrc) return
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    const c = getRGBFromImage(img)
+    if (c) albumColorCache[key] = c
+  }
+  img.src = imgSrc
+}
+
+// ─── Будуємо альбоми ──────────────────────────────────────────
 function buildAlbums() {
   albums = {}
   for (const t of library) {
     const key = `${t.albumArtist}|||${t.album}`
-    if (!albums[key]) {
-      albums[key] = {
-        key, title: t.album, artist: t.albumArtist,
-        year: t.year, cover: null, tracks: []
-      }
-    }
-    // Беремо першу знайдену обкладинку для цього альбому
-    // Take the first found cover for this album
+    if (!albums[key]) albums[key] = { key, title:t.album, artist:t.albumArtist, year:t.year, cover:null, tracks:[] }
     if (!albums[key].cover && t.cover) albums[key].cover = t.cover
     albums[key].tracks.push(t)
   }
-
-  // Сортуємо треки всередині альбому: спочатку за диском, потім за номером треку
-  // Sort tracks within album: disc first, then track number
   for (const k of Object.keys(albums)) {
-    albums[k].tracks.sort((a,b) => {
-      if (a.disc !== b.disc) return a.disc - b.disc
-      return (a.trackNo||99) - (b.trackNo||99)
-    })
+    albums[k].tracks.sort((a,b) => a.disc!==b.disc ? a.disc-b.disc : (a.trackNo||99)-(b.trackNo||99))
+    // Прокидаємо обкладинку на треки без своєї
+    const cover = albums[k].cover
+    if (cover) {
+      for (const t of albums[k].tracks) if (!t.cover) t.cover = cover
+      // Кешуємо колір для Mood
+      cacheAlbumColor(k, cover)
+    }
   }
 }
 
-// ─── Рендер гріду альбомів ────────────────────────────────────
-// ─── Render album grid ────────────────────────────────────────
+// ─── Рендер альбомів ──────────────────────────────────────────
 function renderGrid() {
-  const grid   = qs('#album-grid')
-  const empty  = qs('#empty-state')
-  const header = qs('#albums-header')
+  const grid  = qs('#album-grid')
+  const empty = qs('#empty-state')
+  const stats = qs('#alb-stats')
+  const all   = Object.values(albums)
   const { key, asc } = sortState.alb
-  const allAlbums = Object.values(albums)
 
-  if (allAlbums.length === 0) {
-    grid.style.display   = 'none'
-    header.style.display = 'none'
-    empty.style.display  = 'flex'
+  if (!all.length) {
+    grid.style.display  = 'none'
+    stats.style.display = 'none'
+    empty.style.display = 'flex'
     return
   }
 
-  empty.style.display  = 'none'
-  header.style.display = 'block'
+  empty.style.display = 'none'
+  stats.style.display = 'block'
+  const totalSec = all.reduce((s,a)=>s+a.tracks.reduce((ss,t)=>ss+(t.duration||0),0),0)
+  stats.innerHTML = `<strong>${all.length}</strong> albums · <strong>${all.reduce((s,a)=>s+a.tracks.length,0)}</strong> songs · ${fmtTotal(totalSec)}`
+
   grid.innerHTML = ''
 
-  // Статистика зверху
-  // Stats at the top
-  const totalSec = allAlbums.reduce((s,a) => s + a.tracks.reduce((ss,t) => ss+(t.duration||0),0), 0)
-  qs('#alb-stats').innerHTML =
-    `<strong>${allAlbums.length}</strong> albums · <strong>${allAlbums.reduce((s,a)=>s+a.tracks.length,0)}</strong> songs · ${fmtTotal(totalSec)}`
-
   if (key === 'artist') {
-    // ── Групований вигляд по артистах ──────────────────────────
-    // ── Grouped view by artist ──────────────────────────────────
     grid.style.display = 'block'
-
-    // Будуємо map артистів з їхніми альбомами
-    // Build artist map with their albums
-    const artistMap = {}
-    for (const alb of allAlbums) {
-      const n = alb.artist
-      if (!artistMap[n]) artistMap[n] = { name: n, cover: null, latestYear: 0, albums: [] }
-      artistMap[n].albums.push(alb)
-      if (alb.cover && (alb.year||0) >= artistMap[n].latestYear) {
-        artistMap[n].cover = alb.cover
-        artistMap[n].latestYear = alb.year||0
-      }
+    const amap = {}
+    for (const alb of all) {
+      if (!amap[alb.artist]) amap[alb.artist] = { name:alb.artist, cover:null, latestYear:0, albums:[] }
+      amap[alb.artist].albums.push(alb)
+      if (alb.cover&&(alb.year||0)>=amap[alb.artist].latestYear) { amap[alb.artist].cover=alb.cover; amap[alb.artist].latestYear=alb.year||0 }
     }
-
-    const artistList = Object.values(artistMap).sort((a,b) => asc
-      ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))
-
-    for (const ar of artistList) {
-      // Сортуємо альбоми всередині секції по році
-      // Sort albums within section by year
-      ar.albums.sort((a,b) => (a.year||0) - (b.year||0))
-
-      const section = document.createElement('div')
-      section.className = 'artist-section'
-      section.id = 'artist-sec-' + encodeURIComponent(ar.name)
-
-      const avatarHtml = ar.cover
-        ? `<div class="artist-section-avatar"><img src="${ar.cover}" alt=""></div>`
-        : `<div class="artist-section-avatar">${escHtml(ar.name[0]?.toUpperCase()||'?')}</div>`
-
-      const headerEl = document.createElement('div')
-      headerEl.className = 'artist-section-header'
-      headerEl.innerHTML = `
-        ${avatarHtml}
-        <div>
-          <div class="artist-section-name">${escHtml(ar.name)}</div>
-          <div class="artist-section-count">${ar.albums.length} albums</div>
-        </div>`
-      section.appendChild(headerEl)
-
-      // Грід альбомів під заголовком
-      // Albums grid under the header
-      const innerGrid = document.createElement('div')
-      innerGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
-      for (const alb of ar.albums) {
-        innerGrid.appendChild(makeAlbumCard(alb))
-      }
-      section.appendChild(innerGrid)
-      grid.appendChild(section)
-    }
-
+    Object.values(amap).sort((a,b)=>asc?a.name.localeCompare(b.name):b.name.localeCompare(a.name))
+      .forEach(ar => {
+        ar.albums.sort((a,b)=>(a.year||0)-(b.year||0))
+        const sec = document.createElement('div')
+        sec.className='artist-section'; sec.id='artist-sec-'+encodeURIComponent(ar.name)
+        const av = ar.cover
+          ? `<div class="artist-section-avatar"><img src="${ar.cover}" alt=""></div>`
+          : `<div class="artist-section-avatar">${escHtml(ar.name[0]?.toUpperCase()||'?')}</div>`
+        const hdr = document.createElement('div')
+        hdr.className='artist-section-header'
+        hdr.innerHTML=`${av}<div><div class="artist-section-name">${escHtml(ar.name)}</div><div class="artist-section-count">${ar.albums.length} albums</div></div>`
+        sec.appendChild(hdr)
+        const inner = document.createElement('div')
+        inner.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
+        ar.albums.forEach(alb=>inner.appendChild(makeAlbumCard(alb)))
+        sec.appendChild(inner); grid.appendChild(sec)
+      })
   } else if (key === 'year') {
-    // ── Групований вигляд по роках ──────────────────────────────
-    // ── Grouped view by year ────────────────────────────────────
     grid.style.display = 'block'
-
-    const yearMap = {}
-    for (const alb of allAlbums) {
-      const y = alb.year || '—'
-      if (!yearMap[y]) yearMap[y] = []
-      yearMap[y].push(alb)
-    }
-    const years = Object.keys(yearMap).sort((a,b) => asc ? Number(a)-Number(b) : Number(b)-Number(a))
-
-    for (const yr of years) {
-      const section = document.createElement('div')
-      section.className = 'artist-section'
-
-      const headerEl = document.createElement('div')
-      headerEl.className = 'artist-section-header'
-      headerEl.style.cursor = 'default'
-      headerEl.innerHTML = `
-        <div style="font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--text2)">${escHtml(String(yr))}</div>
-        <div class="artist-section-count">${yearMap[yr].length} albums</div>`
-      section.appendChild(headerEl)
-
-      const innerGrid = document.createElement('div')
-      innerGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
-      for (const alb of yearMap[yr].sort((a,b) => a.title.localeCompare(b.title))) {
-        innerGrid.appendChild(makeAlbumCard(alb))
-      }
-      section.appendChild(innerGrid)
-      grid.appendChild(section)
-    }
-
+    const ymap = {}
+    for (const alb of all) { const y=alb.year||'—'; if(!ymap[y]) ymap[y]=[]; ymap[y].push(alb) }
+    Object.keys(ymap).sort((a,b)=>asc?Number(a)-Number(b):Number(b)-Number(a))
+      .forEach(yr => {
+        const sec=document.createElement('div'); sec.className='artist-section'
+        const hdr=document.createElement('div'); hdr.className='artist-section-header'; hdr.style.cursor='default'
+        hdr.innerHTML=`<div class="year-section-label">${escHtml(String(yr))}</div><div class="artist-section-count">${ymap[yr].length} albums</div>`
+        sec.appendChild(hdr)
+        const inner=document.createElement('div')
+        inner.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
+        ymap[yr].sort((a,b)=>a.title.localeCompare(b.title)).forEach(alb=>inner.appendChild(makeAlbumCard(alb)))
+        sec.appendChild(inner); grid.appendChild(sec)
+      })
   } else {
-    // ── Звичайний плоский грід по назві ─────────────────────────
-    // ── Regular flat grid sorted by title ───────────────────────
-    grid.style.display = 'grid'
-
-    const list = [...allAlbums].sort((a,b) => {
-      const cmp = a.title.localeCompare(b.title)
-      return asc ? cmp : -cmp
-    })
-    for (const alb of list) grid.appendChild(makeAlbumCard(alb, true))
+    grid.style.display='grid'
+    Array.from(all).sort((a,b)=>{const c=a.title.localeCompare(b.title);return asc?c:-c})
+      .forEach(alb=>grid.appendChild(makeAlbumCard(alb,true)))
   }
 }
 
-// Фабрика картки альбому — щоб не повторювати код
-// Album card factory — avoids code repetition
-function makeAlbumCard(alb, showArtist = false) {
+function makeAlbumCard(alb, showArtist=false) {
   const card = document.createElement('div')
-  card.className = 'album-card'
-  card.dataset.albumKey = alb.key
-  card.innerHTML = `
+  card.className='album-card'; card.dataset.albumKey=alb.key
+  card.innerHTML=`
     <div class="album-cover">
-      ${alb.cover ? `<img src="${alb.cover}" alt="" loading="lazy">` : `<div class="album-cover-ph">♫</div>`}
+      ${alb.cover?`<img src="${alb.cover}" alt="" loading="lazy">`:`<div class="album-cover-ph">♫</div>`}
+      <div class="album-play-overlay"><div class="album-play-btn">▶</div></div>
     </div>
     <div class="album-info">
       <div class="album-name">${escHtml(alb.title)}</div>
-      ${showArtist ? `<div class="album-sub">${escHtml(alb.artist)}</div>` : ''}
-      ${alb.year ? `<div class="album-year">${alb.year}</div>` : ''}
+      ${showArtist?`<div class="album-sub">${escHtml(alb.artist)}</div>`:''}
+      ${alb.year?`<div class="album-year">${alb.year}</div>`:''}
     </div>`
+  card.addEventListener('mousemove', e => {
+    const r=card.getBoundingClientRect()
+    const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5
+    card.style.transform=`perspective(600px) rotateY(${x*12}deg) rotateX(${-y*10}deg) scale(1.03)`
+  })
+  card.addEventListener('mouseleave', () => { card.style.transform='' })
   card.addEventListener('click', () => openAlbum(card.dataset.albumKey))
   return card
 }
 
-// ─── Відкрити деталь альбому ──────────────────────────────────
-// ─── Open album detail ────────────────────────────────────────
+// ─── Деталь альбому ───────────────────────────────────────────
 function openAlbum(key) {
-  const alb = albums[key]
-  if (!alb) return // захист якщо щось пішло не так / safety check
-
-  curAlbum = key
-  // Запам'ятовуємо з якого виду прийшли, щоб повернутись правильно
-  // Remember which view we came from, so Back works correctly
-  backView = qs('.nav-item.active')?.dataset.view || 'albums'
-
-  // ── Обкладинка ──
-  qs('#d-art').innerHTML = alb.cover
-    ? `<img src="${alb.cover}" alt="" id="d-art-img">`
-    : `<div class="detail-art-ph">♫</div>`
-
-  // Витягуємо колір після того як перейдемо на деталь
-  // Extract color after switching to detail view
-  if (alb.cover) {
-    // setTimeout(0) гарантує що img вже в DOM коли ми його беремо
-    // setTimeout(0) ensures the img is in the DOM when we grab it
-    setTimeout(() => extractColor(qs('#d-art-img')), 0)
-  }
-
-  // ── Метадані ──
-  qs('#d-title').textContent  = alb.title
-  qs('#d-artist').textContent = alb.artist
-  const totalSec = alb.tracks.reduce((s,t) => s+(t.duration||0), 0)
-  qs('#d-info').textContent   =
-    `${alb.tracks.length} треків${alb.year ? ' · '+alb.year : ''} · ${fmt(totalSec)}`
-
-  // ── Треклист ──
-  const tl = qs('#d-tracks')
-  tl.innerHTML = ''
-  alb.tracks.forEach((track, i) => {
-    const row = document.createElement('div')
-    row.className   = 'track-item'
-    row.dataset.path = track.path
-
-    // Підсвічуємо якщо цей трек зараз грає
-    // Highlight if this track is currently playing
-    if (track.path === nowPath) row.classList.add('playing')
-
-    row.innerHTML = `
-      <div class="track-num">${track.trackNo || i+1}</div>
-      <div class="track-title">${escHtml(track.title)}</div>
-      <div class="track-dur">${fmt(track.duration)}</div>`
-
-    row.addEventListener('click', () => playFromAlbum(key, i))
+  const alb = albums[key]; if (!alb) return
+  curAlbum=key; backTab=qs('.tab.active')?.dataset.tab||'albums'
+  qs('#d-art').innerHTML=alb.cover?`<img src="${alb.cover}" alt="" id="d-art-img">`:`<div class="detail-art-ph">♫</div>`
+  if (alb.cover) setTimeout(()=>extractColor(qs('#d-art-img')),0)
+  qs('#d-title').textContent=alb.title
+  qs('#d-artist').textContent=alb.artist
+  const totalSec=alb.tracks.reduce((s,t)=>s+(t.duration||0),0)
+  qs('#d-info').textContent=`${alb.tracks.length} треків${alb.year?' · '+alb.year:''} · ${fmt(totalSec)}`
+  const tl=qs('#d-tracks'); tl.innerHTML=''
+  alb.tracks.forEach((track,i) => {
+    const row=document.createElement('div')
+    row.className='track-item'; row.dataset.path=track.path
+    if (track.path===nowPath) row.classList.add('playing')
+    row.innerHTML=`<div class="track-num">${track.trackNo||i+1}</div><div class="track-title">${escHtml(track.title)}</div><div class="track-dur">${fmt(track.duration)}</div>`
+    row.addEventListener('click',()=>playFromAlbum(key,i))
     tl.appendChild(row)
   })
-
-  // Переходимо на деталь
-  // Switch to detail view
   showView('detail')
 }
 
-function goBack() {
-  // Повертаємось в попередній вид і активуємо відповідний пункт сайдбара
-  // Go back to previous view and activate the matching sidebar item
-  const navEl = qs(`.nav-item[data-view="${backView}"]`)
-  showView(backView, navEl)
-}
+function goBack() { showView(backTab, qs(`.tab[data-tab="${backTab}"]`)) }
 
-// ─── Рендер артистів ──────────────────────────────────────────
-// ─── Render artists ───────────────────────────────────────────
-function renderArtists() {
-  const list = qs('#artist-list')
-  const map  = {}
-
-  for (const t of library) {
-    const n = t.albumArtist || t.artist
-    if (!map[n]) map[n] = { name: n, albums: new Set(), count: 0, cover: null, latestYear: 0 }
-    map[n].albums.add(t.album)
-    map[n].count++
-    // Аватар = обкладинка ОСТАННЬОГО альбому по даті
-    // Avatar = cover of the LATEST album by date
-    if (t.cover && (t.year || 0) >= map[n].latestYear) {
-      map[n].cover      = t.cover
-      map[n].latestYear = t.year || 0
-    }
-  }
-
-  const { key, asc } = sortState.art
-  const sorted = Object.values(map).sort((a,b) => {
-    if (key === 'albums') return asc ? a.albums.size-b.albums.size : b.albums.size-a.albums.size
-    if (key === 'songs')  return asc ? a.count-b.count : b.count-a.count
-    const cmp = a.name.localeCompare(b.name)
-    return asc ? cmp : -cmp
-  })
-
-  // Статистика
-  // Stats
-  qs('#art-stats').innerHTML =
-    `<strong>${sorted.length}</strong> artists`
-
-  list.innerHTML = ''
-  for (const ar of sorted) {
-    const row = document.createElement('div')
-    row.className = 'artist-idx-item'
-
-    const avatarHtml = ar.cover
-      ? `<div class="artist-idx-avatar"><img src="${ar.cover}" alt=""></div>`
-      : `<div class="artist-idx-avatar">${escHtml(ar.name[0]?.toUpperCase() || '?')}</div>`
-
-    row.innerHTML = `
-      ${avatarHtml}
-      <div class="artist-idx-name">${escHtml(ar.name)}</div>
-      <div class="artist-idx-count">${ar.albums.size} alb · ${ar.count} songs</div>`
-
-    // Клік — переходимо до Albums у режимі "By Artist" і скролимо до артиста
-    // Click — go to Albums in "By Artist" mode and scroll to this artist
-    row.addEventListener('click', () => jumpToArtist(ar.name))
-    list.appendChild(row)
-  }
-}
-
-// Переходимо до Albums > By Artist і скролимо до потрібного артиста
-// Go to Albums > By Artist mode and scroll to the target artist
-function jumpToArtist(artistName) {
-  // Перемикаємо Albums на режим By Artist
-  // Switch Albums to By Artist mode
-  sortState.alb.key = 'artist'
-  sortState.alb.asc = true
-  // Активуємо правильну кнопку в sort bar
-  qsa('#view-albums .sort-btn').forEach(b => b.classList.remove('active'))
-  qs('#alb-btn-artist')?.classList.add('active')
-  qs('#alb-dir').textContent = '↑'
-
-  renderGrid()
-
-  // Переходимо на вид Albums
-  // Switch to Albums view
-  showView('albums', qs('.nav-item[data-view="albums"]'))
-
-  // Після рендеру скролимо до секції цього артиста
-  // After render, scroll to this artist's section
-  setTimeout(() => {
-    const sec = qs('#artist-sec-' + encodeURIComponent(artistName))
-    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, 50)
-}
-
-// openArtist removed — artists now jump to grouped Albums view
-// goBackArtist removed — no longer needed
-
-// ─── Рендер пісень ────────────────────────────────────────────
-// ─── Render songs ─────────────────────────────────────────────
+// ─── Songs ────────────────────────────────────────────────────
 function renderSongs() {
-  const list = qs('#song-list')
-  const { key, asc } = sortState.sng
-
-  // Сортуємо пісні за поточним критерієм
-  // Sort songs by current criterion
-  const sorted = [...library].sort((a,b) => {
-    if (key === 'duration') return asc ? (a.duration||0)-(b.duration||0) : (b.duration||0)-(a.duration||0)
-    const va = (a[key] || '').toLowerCase()
-    const vb = (b[key] || '').toLowerCase()
-    const cmp = va.localeCompare(vb)
-    return asc ? cmp : -cmp
+  const list=qs('#song-list'); const {key,asc}=sortState.sng
+  const sorted=[...library].sort((a,b)=>{
+    if(key==='duration') return asc?(a.duration||0)-(b.duration||0):(b.duration||0)-(a.duration||0)
+    const c=(a[key]||'').toLowerCase().localeCompare((b[key]||'').toLowerCase()); return asc?c:-c
   })
-
-  // Статистика зверху — кількість пісень і загальна тривалість
-  // Stats — song count and total duration
-  const totalSec = library.reduce((s,t) => s+(t.duration||0), 0)
-  qs('#sng-stats').innerHTML =
-    `<strong>${library.length}</strong> songs · ${fmtTotal(totalSec)}`
-
-  list.innerHTML = ''
+  const totalSec=library.reduce((s,t)=>s+(t.duration||0),0)
+  qs('#sng-stats').innerHTML=`<strong>${library.length}</strong> songs · ${fmtTotal(totalSec)}`
+  list.innerHTML=''
   for (const t of sorted) {
-    const row = document.createElement('div')
-    row.className    = 'song-row'
-    row.dataset.path = t.path
-    if (t.path === nowPath) row.classList.add('playing')
-
-    row.innerHTML = `
-      <div class="song-thumb">
-        ${t.cover ? `<img src="${t.cover}" alt="">` : '♫'}
-      </div>
-      <div class="song-info">
-        <div class="song-title-t">${escHtml(t.title)}</div>
-        <div class="song-meta-t">${escHtml(t.artist)} — ${escHtml(t.album)}</div>
-      </div>
+    const row=document.createElement('div')
+    row.className='song-row'; row.dataset.path=t.path
+    if (t.path===nowPath) row.classList.add('playing')
+    row.innerHTML=`
+      <div class="song-thumb">${t.cover ? `<img src="${t.cover}" alt="">` : "♫"}</div>
+      <div class="song-info"><div class="song-title-t">${escHtml(t.title)}</div><div class="song-meta-t">${escHtml(t.artist)} — ${escHtml(t.album)}</div></div>
       <div class="song-dur-t">${fmt(t.duration)}</div>`
-
-    row.addEventListener('click', () => playSingle(t))
+    row.addEventListener('click',()=>playSingle(t))
     list.appendChild(row)
   }
 }
 
-// ─── Навігація між видами ─────────────────────────────────────
-// ─── Navigation between views ────────────────────────────────
-function navTo(name, navEl) {
-  showView(name, navEl)
+// ─── MOOD ─────────────────────────────────────────────────────
+
+// Жанрові ключові слова для кожного настрою
+// Genre keywords for each mood
+const MOOD_GENRES = {
+  chill:      ['ambient','chillout','downtempo','lo-fi','lofi','new age','jazz','acoustic','bossa nova','classical','easy listening','trip-hop'],
+  focus:      ['post-rock','instrumental','electronic','idm','minimal','classical','progressive','math rock','drone'],
+  energy:     ['rock','metal','punk','hardcore','hip-hop','hip hop','rap','dance','electronic','drum and bass','dnb','techno','house','pop punk','alternative'],
+  melancholy: ['blues','folk','indie','post-punk','shoegaze','darkwave','sad','emo','country','singer-songwriter','melancholic'],
+  random:     [],
 }
 
-function showView(name, navEl) {
-  // Ховаємо всі види і показуємо потрібний
-  // Hide all views and show the requested one
-  qsa('.view').forEach(v => v.classList.remove('active'))
-  qs(`#view-${name}`)?.classList.add('active')
+// Кольорові скорери — fallback якщо жанру немає
+// Color scorers — fallback when genre tags are absent
+const COLOR_SCORERS = {
+  chill:      c => c.b - c.r + c.b - c.g,
+  focus:      c => (c.r+c.b)/2 - c.g,
+  energy:     c => c.r + c.g/2 - c.b,
+  melancholy: c => 255 - (c.r+c.g+c.b)/3,
+  random:     () => Math.random() * 255,
+}
 
-  if (navEl) {
-    qsa('.nav-item').forEach(n => n.classList.remove('active'))
-    navEl.classList.add('active')
+// Рахуємо скор альбому: спочатку жанр (0 або 1), потім колір як доповнення
+// Score album: genre first (0 or 1), then color as supplement
+function scoreMoodAlbum(alb, mood) {
+  if (mood === 'random') return Math.random()
+
+  const keywords = MOOD_GENRES[mood]
+
+  // Збираємо жанри з усіх треків альбому
+  // Collect genres from all album tracks
+  const genreText = alb.tracks
+    .flatMap(t => t.genre ? (Array.isArray(t.genre) ? t.genre : [t.genre]) : [])
+    .join(' ').toLowerCase()
+
+  // Жанровий скор — скільки ключових слів збіглось (нормалізовано)
+  // Genre score — how many keywords matched (normalized)
+  let genreScore = 0
+  if (genreText) {
+    const hits = keywords.filter(kw => genreText.includes(kw)).length
+    genreScore = hits / keywords.length  // 0..1
+  }
+
+  // Кольоровий скор — нормалізований 0..1
+  // Color score — normalized 0..1
+  const c = albumColorCache[alb.key]
+  const colorRaw = c ? COLOR_SCORERS[mood](c) : 0
+  const colorScore = Math.max(0, Math.min(1, (colorRaw + 255) / 510))
+
+  // Якщо є жанри — вони домінують (70%), колір доповнює (30%)
+  // If genres found — they dominate (70%), color supplements (30%)
+  // Якщо жанрів нема — тільки колір
+  // If no genres — color only
+  return genreText
+    ? genreScore * 0.7 + colorScore * 0.3
+    : colorScore
+}
+
+const MOOD_LABELS = {
+  chill:      'Розслаблено',
+  focus:      'Фокус',
+  energy:     'Енергія',
+  melancholy: 'Меланхолія',
+  random:     'Сюрприз',
+}
+
+function playMood(mood) {
+  const all = Object.values(albums).filter(a => a.tracks.length > 0)
+
+  if (!all.length) {
+    qs('#mood-hint').style.display = 'block'
+    return
+  }
+  qs('#mood-hint').style.display = 'none'
+
+  // Сортуємо за скором і беремо топ-4 (але не більше ніж є)
+  // Sort by score and take top-4 (but no more than available)
+  const scored = all
+    .map(a => ({ alb: a, score: scoreMoodAlbum(a, mood) }))
+    .sort((a,b) => b.score - a.score)
+
+  const picks = scored.slice(0, Math.min(4, scored.length)).map(s => s.alb)
+
+  // Якщо тільки один альбом — одразу грати без вибору
+  // If only one album — play immediately without selection screen
+  if (picks.length === 1) { startMoodAlbum(picks[0]); return }
+
+  // Показуємо екран вибору
+  // Show selection screen
+  showMoodPicks(mood, picks)
+}
+
+// Показуємо пропозиції альбомів
+// Show album suggestions
+function showMoodPicks(mood, picks) {
+  qs('.mood-grid').style.display  = 'none'
+  qs('#mood-picks').classList.add('visible')
+  qs('#mood-picks-label').textContent = MOOD_LABELS[mood]
+
+  const grid = qs('#mood-pick-grid')
+  grid.innerHTML = ''
+
+  for (const alb of picks) {
+    const card = document.createElement('div')
+    card.className = 'mood-pick-card'
+    card.innerHTML = `
+      <div class="mood-pick-cover">
+        ${alb.cover ? `<img src="${alb.cover}" alt="" loading="lazy">` : '♫'}
+      </div>
+      <div class="mood-pick-info">
+        <div class="mood-pick-title">${escHtml(alb.title)}</div>
+        <div class="mood-pick-artist">${escHtml(alb.artist)}</div>
+        ${alb.year ? `<div class="mood-pick-year">${alb.year}</div>` : ''}
+      </div>`
+    card.addEventListener('click', () => startMoodAlbum(alb))
+    grid.appendChild(card)
+  }
+}
+
+// Запускаємо альбом після вибору
+// Start album after selection
+function startMoodAlbum(alb) {
+  queue    = [...alb.tracks].sort(() => Math.random() - 0.5)
+  qIdx     = 0
+  curAlbum = alb.key
+  backTab  = 'mood'
+  playTrack(queue[0])
+  openAlbum(alb.key)
+}
+
+// Повертаємось до вибору настрою
+// Go back to mood selection
+function backToMoodGrid() {
+  qs('.mood-grid').style.display = ''
+  qs('#mood-picks').classList.remove('visible')
+}
+
+// ─── Навігація ────────────────────────────────────────────────
+function switchTab(name, tabEl) {
+  qsa('.tab').forEach(t=>t.classList.remove('active'))
+  if (tabEl) tabEl.classList.add('active')
+  showView(name)
+  qs('#sort-albums').style.display = name==='albums' ? 'flex' : 'none'
+  qs('#sort-songs').style.display  = name==='songs'  ? 'flex' : 'none'
+}
+
+function showView(name, tabEl) {
+  qsa('.view').forEach(v=>v.classList.remove('active'))
+  qs(`#view-${name}`)?.classList.add('active')
+  if (tabEl) {
+    qsa('.tab').forEach(t=>t.classList.remove('active'))
+    tabEl.classList.add('active')
+    qs('#sort-albums').style.display = tabEl.dataset.tab==='albums' ? 'flex' : 'none'
+    qs('#sort-songs').style.display  = tabEl.dataset.tab==='songs'  ? 'flex' : 'none'
   }
 }
 
 // ─── Відтворення ──────────────────────────────────────────────
-// ─── Playback ─────────────────────────────────────────────────
-
-// Грати з конкретного треку в альбомі
-// Play from a specific track in an album
-function playFromAlbum(key, idx) {
-  queue = [...albums[key].tracks]
-  qIdx  = idx
-  playTrack(queue[qIdx])
-}
-
-// Кнопки Play/Shuffle на деталі альбому
-// Play/Shuffle buttons on album detail
+function playFromAlbum(key,idx) { queue=[...albums[key].tracks]; qIdx=idx; playTrack(queue[qIdx]) }
 function albumPlay(doShuffle) {
-  if (!curAlbum || !albums[curAlbum]) return
-  queue = [...albums[curAlbum].tracks]
-  if (doShuffle) queue.sort(() => Math.random() - 0.5)
-  qIdx = 0
-  playTrack(queue[0])
+  if (!curAlbum||!albums[curAlbum]) return
+  queue=[...albums[curAlbum].tracks]
+  if (doShuffle) queue.sort(()=>Math.random()-.5)
+  qIdx=0; playTrack(queue[0])
 }
-
-// Грати окрему пісню зі списку Songs, з усіма піснями як контекстом
-// Play a single song from the Songs list, with all songs as context
 function playSingle(track) {
-  const sorted = [...library].sort((a,b) => a.title.localeCompare(b.title))
-  queue = sorted
-  qIdx  = queue.findIndex(t => t.path === track.path)
-  if (qIdx < 0) { queue = [track]; qIdx = 0 }
+  queue=[...library].sort((a,b)=>a.title.localeCompare(b.title))
+  qIdx=queue.findIndex(t=>t.path===track.path)
+  if(qIdx<0){queue=[track];qIdx=0}
   playTrack(track)
 }
 
-// Основна функція відтворення — оновлює аудіо і весь UI
-// Core playback function — updates audio element and all UI
 function playTrack(track) {
   if (!track) return
-  nowPath    = track.path
-  audio.src  = 'file:///' + track.path.replace(/\\/g, '/')
-  audio.play().catch(e => console.error('Playback error:', e))
+  nowPath=track.path
+  audio.src='file:///'+track.path.replace(/\\/g,'/')
+  audio.play().catch(e=>console.error('Playback error:',e))
+  qs('#p-title').textContent=track.title
+  qs('#p-artist').textContent=`${track.artist} — ${track.album}`
 
-  // Плеєр — назва і виконавець
-  // Player bar — title and artist
-  qs('#p-title').textContent  = track.title
-  qs('#p-artist').textContent = `${track.artist} — ${track.album}`
+  const q=track.quality||{}, qEl=qs('#p-quality')
+  qEl.innerHTML=''
+  const lossless=new Set(['flac','alac','wav','aiff','aif','dsf','dff','wv','ape'])
+  const isLossless=lossless.has((q.codec||q.container||'').toLowerCase())
+  const mkBadge=(text,cls='')=>{ const b=document.createElement('span'); b.className='q-badge '+cls; b.textContent=text; qEl.appendChild(b) }
+  if(q.container) mkBadge(q.container.toUpperCase(), isLossless?'lossless':'lossy')
+  if(q.bitrate)   mkBadge(Math.round(q.bitrate/1000)+' kbps')
+  if(q.sampleRate) mkBadge((q.sampleRate>=1000?(q.sampleRate/1000)+' kHz':q.sampleRate+' Hz')+(q.bitsPerSample?' / '+q.bitsPerSample+'bit':''))
 
-  // Показуємо якість файлу — формат, бітрейт, семплрейт
-  // Show file quality — format, bitrate, sample rate
-  const q   = track.quality || {}
-  const qEl = qs('#p-quality')
-  qEl.innerHTML = ''
-  const lossless = new Set(['flac','alac','wav','aiff','aif','dsf','dff','wv','ape'])
-  const isLossless = lossless.has((q.codec || q.container || '').toLowerCase())
-  if (q.container) {
-    const b = document.createElement('span')
-    b.className = 'q-badge ' + (isLossless ? 'lossless' : 'lossy')
-    b.textContent = q.container.toUpperCase()
-    qEl.appendChild(b)
-  }
-  if (q.bitrate) {
-    const b = document.createElement('span')
-    b.className = 'q-badge'
-    b.textContent = Math.round(q.bitrate / 1000) + ' kbps'
-    qEl.appendChild(b)
-  }
-  if (q.sampleRate) {
-    const b = document.createElement('span')
-    b.className = 'q-badge'
-    const sr = q.sampleRate >= 1000 ? (q.sampleRate / 1000) + ' kHz' : q.sampleRate + ' Hz'
-    const bd = q.bitsPerSample ? ' / ' + q.bitsPerSample + 'bit' : ''
-    b.textContent = sr + bd
-    qEl.appendChild(b)
-  }
-  qs('#btn-play').textContent = '⏸'
-
-  // Обкладинка в плеєрі
-  // Cover in player bar
-  const cov = qs('#p-cover')
-  if (track.cover) {
-    cov.innerHTML = `<img src="${track.cover}" alt="" id="p-cov-img">`
-    setTimeout(() => extractColor(qs('#p-cov-img')), 0)
-  } else {
-    cov.textContent = '♫'
-  }
-
-  // Підсвічуємо активний трек у всіх видах
-  // Highlight active track in all views
+  qs('#btn-play').textContent='⏸'
+  const cov=qs('#p-cover')
+  if (track.cover) { cov.innerHTML=`<img src="${track.cover}" alt="" id="p-cov-img">`; setTimeout(()=>extractColor(qs('#p-cov-img')),0) }
+  else cov.textContent='♫'
   refreshPlayingMarkers()
 }
 
-// Оновлюємо "зараз грає" маркери скрізь де вони є
-// Update "now playing" markers everywhere they exist
 function refreshPlayingMarkers() {
-  qsa('.track-item').forEach(el => {
-    el.classList.toggle('playing', el.dataset.path === nowPath)
-  })
-  qsa('.song-row').forEach(el => {
-    el.classList.toggle('playing', el.dataset.path === nowPath)
-  })
+  qsa('.track-item').forEach(el=>el.classList.toggle('playing',el.dataset.path===nowPath))
+  qsa('.song-row').forEach(el=>el.classList.toggle('playing',el.dataset.path===nowPath))
 }
 
-function togglePlay() {
-  if (!queue.length) return
-  audio.paused ? audio.play() : audio.pause()
+function togglePlay()   { if(queue.length) audio.paused?audio.play():audio.pause() }
+function prevTrack()    { if(audio.currentTime>3){audio.currentTime=0;return}; if(qIdx>0){qIdx--;playTrack(queue[qIdx])} }
+function nextTrack()    {
+  if(shuffle){qIdx=Math.floor(Math.random()*queue.length);playTrack(queue[qIdx]);return}
+  if(qIdx<queue.length-1){qIdx++;playTrack(queue[qIdx])} else if(repeat===1){qIdx=0;playTrack(queue[0])}
 }
+function toggleShuffle(){ shuffle=!shuffle; qs('#btn-shuf').classList.toggle('on',shuffle) }
+function toggleRepeat() { repeat=(repeat+1)%3; qs('#btn-rep').classList.toggle('on',repeat>0); qs('#btn-rep').textContent=repeat===2?'↺¹':'↺' }
+function seek(e)        { if(audio.duration) audio.currentTime=(e.offsetX/qs('#prog-track').offsetWidth)*audio.duration }
+function setVol(v)      { audio.volume=parseFloat(v) }
+function toggleMute()   { audio.muted=!audio.muted; qs('#vol-icon').textContent=audio.muted?'🔇':'🔊' }
 
-function prevTrack() {
-  // Якщо пройшло більше 3 секунд — починаємо з початку
-  // If more than 3 seconds have passed — restart the track
-  if (audio.currentTime > 3) { audio.currentTime = 0; return }
-  if (qIdx > 0) { qIdx--; playTrack(queue[qIdx]) }
-}
+audio.addEventListener('timeupdate',()=>{ if(!audio.duration)return; qs('#prog-fill').style.width=(audio.currentTime/audio.duration*100)+'%'; qs('#t-cur').textContent=fmt(audio.currentTime); qs('#t-dur').textContent=fmt(audio.duration) })
+audio.addEventListener('play',  ()=>qs('#btn-play').textContent='⏸')
+audio.addEventListener('pause', ()=>qs('#btn-play').textContent='▶')
+audio.addEventListener('ended', ()=>{ if(repeat===2){audio.currentTime=0;audio.play();return}; nextTrack() })
 
-function nextTrack() {
-  if (shuffle) {
-    qIdx = Math.floor(Math.random() * queue.length)
-    playTrack(queue[qIdx])
-    return
-  }
-  if (qIdx < queue.length - 1) {
-    qIdx++; playTrack(queue[qIdx])
-  } else if (repeat === 1) {
-    qIdx = 0; playTrack(queue[0]) // повторюємо всю чергу / repeat whole queue
-  }
-}
-
-function toggleShuffle() {
-  shuffle = !shuffle
-  qs('#btn-shuf').classList.toggle('on', shuffle)
-}
-
-function toggleRepeat() {
-  repeat = (repeat + 1) % 3
-  const btn = qs('#btn-rep')
-  btn.classList.toggle('on', repeat > 0)
-  if (repeat === 2) btn.textContent = '↺¹' // один трек / one track
-  else              btn.textContent = '↺'
-}
-
-function seek(e) {
-  if (!audio.duration) return
-  audio.currentTime = (e.offsetX / qs('#prog-track').offsetWidth) * audio.duration
-}
-
-function setVol(v) { audio.volume = parseFloat(v) }
-
-function toggleMute() {
-  audio.muted = !audio.muted
-  qs('#vol-icon').textContent = audio.muted ? '🔇' : '🔊'
-}
-
-// ─── Аудіо події ──────────────────────────────────────────────
-// ─── Audio events ─────────────────────────────────────────────
-audio.addEventListener('timeupdate', () => {
-  if (!audio.duration) return
-  qs('#prog-fill').style.width = (audio.currentTime / audio.duration * 100) + '%'
-  qs('#t-cur').textContent = fmt(audio.currentTime)
-  qs('#t-dur').textContent = fmt(audio.duration)
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT') return
+  if(e.code==='Space')                  {e.preventDefault();togglePlay()}
+  if(e.code==='ArrowLeft' &&e.altKey)   prevTrack()
+  if(e.code==='ArrowRight'&&e.altKey)   nextTrack()
+  if(e.code==='ArrowRight'&&!e.altKey)  audio.currentTime=Math.min(audio.duration||0,audio.currentTime+10)
+  if(e.code==='ArrowLeft' &&!e.altKey)  audio.currentTime=Math.max(0,audio.currentTime-10)
+  if(e.code==='Escape'&&settingsOpen)   toggleSettings()
 })
 
-audio.addEventListener('play',  () => qs('#btn-play').textContent = '⏸')
-audio.addEventListener('pause', () => qs('#btn-play').textContent = '▶')
-
-audio.addEventListener('ended', () => {
-  if (repeat === 2) { audio.currentTime = 0; audio.play(); return }
-  nextTrack()
-})
-
-// ─── Клавіатурні скорочення ───────────────────────────────────
-// ─── Keyboard shortcuts ───────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return
-  if (e.code === 'Space')                      { e.preventDefault(); togglePlay() }
-  if (e.code === 'ArrowLeft'  && e.altKey)     prevTrack()
-  if (e.code === 'ArrowRight' && e.altKey)     nextTrack()
-  if (e.code === 'ArrowRight' && !e.altKey)    audio.currentTime = Math.min(audio.duration||0, audio.currentTime+10)
-  if (e.code === 'ArrowLeft'  && !e.altKey)    audio.currentTime = Math.max(0, audio.currentTime-10)
-})
-
-// ─── Утиліта для безпечного виводу тексту в HTML ─────────────
-// ─── Utility for safe text output in HTML ────────────────────
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-}
-
-// ─── Хелпери для оверлею завантаження ────────────────────────
-// ─── Loading overlay helpers ─────────────────────────────────
-function showLoading(msg = 'Завантаження…') {
-  qs('#loading-text').textContent = msg
-  qs('#loading-overlay').classList.add('visible')
-}
-function hideLoading() {
-  qs('#loading-overlay').classList.remove('visible')
-}
-
-// ─── Функції сортування ───────────────────────────────────────
-// ─── Sort functions ───────────────────────────────────────────
-
-// Перемикаємо активну кнопку сортування і ререндеримо
-// Toggle active sort button and re-render
-function setSortBtn(groupSel, activeEl) {
-  document.querySelectorAll(groupSel).forEach(b => b.classList.remove('active'))
-  activeEl.classList.add('active')
-}
-
-function sortAlbums(key, el) {
-  sortState.alb.key = key
-  setSortBtn('#view-albums .sort-btn', el)
-  renderGrid()
-}
-
-function sortArtists(key, el) {
-  sortState.art.key = key
-  setSortBtn('#view-artists .sort-btn', el)
-  renderArtists()
-}
-
-function sortSongs(key, el) {
-  sortState.sng.key = key
-  setSortBtn('#view-songs .sort-btn', el)
-  renderSongs()
-}
-
-// Стрілка напрямку — перемикає asc/desc і оновлює іконку
-// Direction arrow — toggles asc/desc and updates icon
-function flipDir(view) {
-  const map = { alb: ['alb-dir', renderGrid], art: ['art-dir', renderArtists], sng: ['sng-dir', renderSongs] }
-  const [btnId, fn] = map[view]
-  sortState[view].asc = !sortState[view].asc
-  qs('#' + btnId).textContent = sortState[view].asc ? '↑' : '↓'
+// ─── Сортування ───────────────────────────────────────────────
+function setSortBtn(sel,el){ qsa(sel).forEach(b=>b.classList.remove('active')); el.classList.add('active') }
+function sortAlbums(key,el){ sortState.alb.key=key; setSortBtn('#sort-albums .s-btn',el); renderGrid() }
+function sortSongs(key,el) { sortState.sng.key=key; setSortBtn('#sort-songs .s-btn',el); renderSongs() }
+function flipDir(v) {
+  const map={alb:['alb-dir',renderGrid],sng:['sng-dir',renderSongs]}
+  const [id,fn]=map[v]
+  sortState[v].asc=!sortState[v].asc
+  qs('#'+id).textContent=sortState[v].asc?'↑':'↓'
   fn()
 }
 
-// ─── Старт ────────────────────────────────────────────────────
+function showLoading(msg='Завантаження…'){ qs('#loading-text').textContent=msg; qs('#loading-overlay').classList.add('visible') }
+function hideLoading(){ qs('#loading-overlay').classList.remove('visible') }
+
 init()
 </script>
 </body>
