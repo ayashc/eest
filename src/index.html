@@ -232,6 +232,9 @@ html, body {
   transform-style:preserve-3d;
   transition:box-shadow .3s var(--ease), border-color .3s;
   will-change:transform; position:relative;
+  contain: content; /* ізолюємо layout/paint, швидше сортування / isolate layout&paint */
+  content-visibility:auto; /* не малюємо те, що поза екраном / skip offscreen paint */
+  contain-intrinsic-size: 240px 240px; /* запасний розмір для offscreen / fallback size */
 }
 .album-card::after {
   content:''; position:absolute; inset:0; border-radius:var(--r);
@@ -276,8 +279,13 @@ html, body {
 .album-sub  { font-size:12px; color:var(--text2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .album-year { font-size:11px; color:var(--text3); margin-top:2px; }
 
+/* Artist line on album cards: show only when we need it (Title mode) */
+.album-card .album-sub { display:none; }
+.album-card.show-artist .album-sub { display:block; }
+
+
 /* Grouped views */
-.artist-section { margin-bottom:38px; }
+.artist-section { margin-bottom:38px; content-visibility:auto; contain-intrinsic-size: 360px 900px; }
 .artist-section-header { display:flex; align-items:center; gap:13px; margin-bottom:14px; padding:4px 0; }
 .artist-section-avatar {
   width:36px; height:36px; border-radius:50%; overflow:hidden; flex-shrink:0;
@@ -395,6 +403,26 @@ html, body {
 }
 .mood-pick-card:active { transform:scale(.98); }
 
+/* Стан "зараз грає" на картці */
+.mood-pick-card.now-playing {
+  background:rgba(var(--accent),.12);
+  border-color:rgba(var(--accent),.35);
+}
+.mood-pick-card.now-playing .mood-pick-title { color:rgba(var(--accent),1); }
+
+/* Іконка play/анімація на картці */
+.mood-pick-playing-icon {
+  width:32px; height:32px; border-radius:50%; flex-shrink:0;
+  background:rgba(var(--accent),1);
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; color:#fff;
+  animation:pulsePlay 1.8s ease-in-out infinite;
+}
+@keyframes pulsePlay {
+  0%,100% { box-shadow:0 0 0 0 rgba(var(--accent),.5); }
+  50%      { box-shadow:0 0 0 8px rgba(var(--accent),0); }
+}
+
 .mood-pick-cover {
   width:52px; height:52px; border-radius:9px; flex-shrink:0;
   overflow:hidden; background:var(--g2);
@@ -415,6 +443,9 @@ html, body {
 
 /* ─── Songs ──────────────────────────────────────────────────── */
 .song-row {
+  contain: content; /* легше для браузера при великому списку / easier on big lists */
+  content-visibility:auto; /* Chromium: великий буст для довгих списків */
+  contain-intrinsic-size: 56px 800px;
   display:flex; align-items:center; gap:13px;
   padding:7px 10px; border-radius:9px;
   cursor:pointer; transition:background .12s;
@@ -791,8 +822,61 @@ html, body {
 'use strict'
 const { ipcRenderer: ipc } = require('electron')
 
-let library  = []
-let albums   = {}
+// ─── Логер ────────────────────────────────────────────────────
+// Простий логер з рівнями і timestamp — допомагає дебагати
+// Simple logger with levels and timestamp — helps debug
+const log = {
+  // Форматуємо і пишемо в DevTools консоль
+  // Format and write to DevTools console
+  _fmt: (lvl, ...a) => {
+    const t = new Date().toISOString().slice(11,23)
+    const fn = lvl === 'error' ? 'error' : lvl === 'warn' ? 'warn' : 'log'
+    console[fn](`[${t}] [${lvl.toUpperCase()}]`, ...a)
+
+    // Дублюємо WARN/ERROR у файл лога через main процес (щоб не ловити "а де помилка?" потім)
+    // Mirror WARN/ERROR into a log file via main process (so we can debug later)
+    if (lvl === 'warn' || lvl === 'error') {
+      try {
+        ipc.send('renderer-log', {
+          level: lvl,
+          time: new Date().toISOString(),
+          message: a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')
+        })
+      } catch (_) {}
+    }
+  },
+  info:  (...a) => log._fmt('info',  ...a),
+  warn:  (...a) => log._fmt('warn',  ...a),
+  error: (...a) => log._fmt('error', ...a),
+
+  // Чистий JS-час (без paint)
+  // Pure JS time (without paint)
+  perf: (label, fn, warnMs = 16) => {
+    const t = performance.now()
+    const r = fn()
+    const ms = performance.now() - t
+    if (ms > warnMs) log.warn(`SLOW(js) ${label}: ${ms.toFixed(1)}ms`)
+    return r
+  },
+
+  // "Як відчуває користувач" — міряємо до наступного кадру (layout/paint теж сюди потрапляють)
+  // "User-perceived" — measure until next frames (layout/paint included)
+  perfFrame: (label, fn, warnMs = 50) => {
+    const t0 = performance.now()
+    fn()
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const ms = performance.now() - t0
+        if (ms > warnMs) log.warn(`SLOW(frame) ${label}: ${ms.toFixed(1)}ms`)
+      })
+    })
+  }
+}
+
+
+let library     = []
+let sortedLib   = []  // відкешована відсортована бібліотека для Songs / cached sorted library for Songs
+let albums      = {}
 let folders  = []
 let queue    = []
 let qIdx     = 0
@@ -803,9 +887,23 @@ let backTab  = 'albums'
 let nowPath  = null
 let settingsOpen = false
 
+// Статистика бібліотеки — рахуємо 1 раз після скану, щоб не робити reduce() на кожен рендер
+// Library stats — compute once after scan, avoid reduce() on every render
+const libStats = { songs: 0, albums: 0, sec: 0 }
+
+// Рендер Songs великими порціями, щоб UI не "підвисав" на тисячах треків
+// Render Songs in chunks so UI stays responsive on thousands of tracks
+let songsRenderJob = 0
 // Кольори кожного альбому — кешуємо щоб не перераховувати кожен раз
 // Album color cache — so we don't recompute every time
 const albumColorCache = {}
+
+// DOM кеш — не пересоздаємо картки/рядки при сортуванні, лише переставляємо їх.
+// DOM cache — do not recreate cards/rows on sort, only reorder them.
+const domCache = {
+  albumCards: new Map(), // key -> element
+  songRows:   new Map(), // path -> element
+}
 
 const sortState = {
   alb: { key: 'title', asc: true },
@@ -826,9 +924,12 @@ async function init() {
   renderFoldersList()
   if (folders.length > 0) {
     showLoading('Завантаження бібліотеки…')
+    log.info('Loading saved folders:', folders)
     library = await ipc.invoke('scan-saved-folders', folders)
-    buildAlbums()
-    renderGrid(); renderSongs()
+    log.info(`Library loaded: ${library.length} tracks`)
+    log.perf('buildAlbums', buildAlbums)
+    log.perf('renderGrid',  renderGrid)
+    log.perf('renderSongs', renderSongs)
     hideLoading()
   }
 }
@@ -876,10 +977,14 @@ async function addFolder() {
   showLoading('Сканування папки…')
   const tracks   = await ipc.invoke('scan-folder', folder)
   const existing = new Set(library.map(t => t.path))
-  library = [...library, ...tracks.filter(t => !existing.has(t.path))]
+  const fresh = tracks.filter(t => !existing.has(t.path))
+  log.info(`Scan done: ${tracks.length} found, ${fresh.length} new`)
+  library = [...library, ...fresh]
   folders.push(folder)
   await ipc.invoke('save-config', { folders })
-  buildAlbums(); renderGrid(); renderSongs()
+  log.perf('buildAlbums', buildAlbums)
+  log.perf('renderGrid',  renderGrid)
+  log.perf('renderSongs', renderSongs)
   renderFoldersList()
   hideLoading()
 }
@@ -952,7 +1057,24 @@ function buildAlbums() {
       cacheAlbumColor(k, cover)
     }
   }
+  // Чистимо DOM-кеш від того, чого більше немає в бібліотеці (якщо видалили папку)
+  // Prune DOM cache for removed items (e.g. folder removed)
+  const aliveAlbumKeys = new Set(Object.keys(albums))
+  for (const k of domCache.albumCards.keys()) {
+    if (!aliveAlbumKeys.has(k)) domCache.albumCards.delete(k)
+  }
+  const alivePaths = new Set(library.map(t => t.path))
+  for (const pth of domCache.songRows.keys()) {
+    if (!alivePaths.has(pth)) domCache.songRows.delete(pth)
+  }
 }
+
+  // Статистика: рахуємо один раз після рескану
+  // Stats: compute once after rescan
+  libStats.songs  = library.length
+  libStats.albums = Object.keys(albums).length
+  libStats.sec    = library.reduce((s,t)=>s+(t.duration||0),0)
+
 
 // ─── Рендер альбомів ──────────────────────────────────────────
 function renderGrid() {
@@ -974,7 +1096,11 @@ function renderGrid() {
   const totalSec = all.reduce((s,a)=>s+a.tracks.reduce((ss,t)=>ss+(t.duration||0),0),0)
   stats.innerHTML = `<strong>${all.length}</strong> albums · <strong>${all.reduce((s,a)=>s+a.tracks.length,0)}</strong> songs · ${fmtTotal(totalSec)}`
 
-  grid.innerHTML = ''
+  // ВАЖЛИВО: не робимо grid.innerHTML='' — це вбиває IMG і змушує їх декодуватися заново.
+  // IMPORTANT: do not use grid.innerHTML='' — it kills IMG nodes and forces re-decode.
+  // Ми просто переставляємо існуючі DOM-ноди.
+  // We only reorder existing DOM nodes.
+  grid.replaceChildren()
 
   if (key === 'artist') {
     grid.style.display = 'block'
@@ -982,69 +1108,156 @@ function renderGrid() {
     for (const alb of all) {
       if (!amap[alb.artist]) amap[alb.artist] = { name:alb.artist, cover:null, latestYear:0, albums:[] }
       amap[alb.artist].albums.push(alb)
-      if (alb.cover&&(alb.year||0)>=amap[alb.artist].latestYear) { amap[alb.artist].cover=alb.cover; amap[alb.artist].latestYear=alb.year||0 }
+      if (alb.cover && (alb.year||0) >= amap[alb.artist].latestYear) {
+        amap[alb.artist].cover = alb.cover
+        amap[alb.artist].latestYear = alb.year || 0
+      }
     }
-    Object.values(amap).sort((a,b)=>asc?a.name.localeCompare(b.name):b.name.localeCompare(a.name))
+
+    const frag = document.createDocumentFragment()
+    Object.values(amap)
+      .sort((a,b)=>asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))
       .forEach(ar => {
         ar.albums.sort((a,b)=>(a.year||0)-(b.year||0))
+
         const sec = document.createElement('div')
-        sec.className='artist-section'; sec.id='artist-sec-'+encodeURIComponent(ar.name)
+        sec.className='artist-section'
+        sec.id='artist-sec-'+encodeURIComponent(ar.name)
+
         const av = ar.cover
           ? `<div class="artist-section-avatar"><img src="${ar.cover}" alt=""></div>`
           : `<div class="artist-section-avatar">${escHtml(ar.name[0]?.toUpperCase()||'?')}</div>`
+
         const hdr = document.createElement('div')
         hdr.className='artist-section-header'
         hdr.innerHTML=`${av}<div><div class="artist-section-name">${escHtml(ar.name)}</div><div class="artist-section-count">${ar.albums.length} albums</div></div>`
         sec.appendChild(hdr)
+
         const inner = document.createElement('div')
         inner.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
-        ar.albums.forEach(alb=>inner.appendChild(makeAlbumCard(alb)))
-        sec.appendChild(inner); grid.appendChild(sec)
+        const innerFrag = document.createDocumentFragment()
+
+        ar.albums.forEach(alb => innerFrag.appendChild(makeAlbumCard(alb, /*showArtist*/ false)))
+        inner.appendChild(innerFrag)
+        sec.appendChild(inner)
+
+        frag.appendChild(sec)
       })
-  } else if (key === 'year') {
+
+    grid.appendChild(frag)
+    return
+  }
+
+  if (key === 'year') {
     grid.style.display = 'block'
     const ymap = {}
-    for (const alb of all) { const y=alb.year||'—'; if(!ymap[y]) ymap[y]=[]; ymap[y].push(alb) }
-    Object.keys(ymap).sort((a,b)=>asc?Number(a)-Number(b):Number(b)-Number(a))
+    for (const alb of all) {
+      const y = alb.year || '—'
+      if (!ymap[y]) ymap[y] = []
+      ymap[y].push(alb)
+    }
+
+    const frag = document.createDocumentFragment()
+    Object.keys(ymap)
+      .sort((a,b)=>asc ? Number(a)-Number(b) : Number(b)-Number(a))
       .forEach(yr => {
-        const sec=document.createElement('div'); sec.className='artist-section'
-        const hdr=document.createElement('div'); hdr.className='artist-section-header'; hdr.style.cursor='default'
+        const sec=document.createElement('div')
+        sec.className='artist-section'
+
+        const hdr=document.createElement('div')
+        hdr.className='artist-section-header'
+        hdr.style.cursor='default'
         hdr.innerHTML=`<div class="year-section-label">${escHtml(String(yr))}</div><div class="artist-section-count">${ymap[yr].length} albums</div>`
         sec.appendChild(hdr)
+
         const inner=document.createElement('div')
         inner.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px'
-        ymap[yr].sort((a,b)=>a.title.localeCompare(b.title)).forEach(alb=>inner.appendChild(makeAlbumCard(alb)))
-        sec.appendChild(inner); grid.appendChild(sec)
+        const innerFrag = document.createDocumentFragment()
+
+        ymap[yr]
+          .sort((a,b)=>a.title.localeCompare(b.title))
+          .forEach(alb => innerFrag.appendChild(makeAlbumCard(alb, /*showArtist*/ true)))
+
+        inner.appendChild(innerFrag)
+        sec.appendChild(inner)
+        frag.appendChild(sec)
       })
-  } else {
-    grid.style.display='grid'
-    Array.from(all).sort((a,b)=>{const c=a.title.localeCompare(b.title);return asc?c:-c})
-      .forEach(alb=>grid.appendChild(makeAlbumCard(alb,true)))
+
+    grid.appendChild(frag)
+    return
   }
+
+  // Title grid
+  grid.style.display='grid'
+  const frag = document.createDocumentFragment()
+  Array.from(all)
+    .sort((a,b)=>{const c=a.title.localeCompare(b.title); return asc ? c : -c})
+    .forEach(alb => frag.appendChild(makeAlbumCard(alb, /*showArtist*/ true)))
+  grid.appendChild(frag)
 }
 
-function makeAlbumCard(alb, showArtist=false) {
+function makeAlbumCard(alb, showArtist = false) {
+  // Повертаємо вже створену картку, якщо вона є.
+  // Return cached card if already created.
+  const cached = domCache.albumCards.get(alb.key)
+  if (cached) {
+    cached.classList.toggle('show-artist', !!showArtist)
+    // Якщо альбом оновився (наприклад з'явилась обкладинка після рескану) — підправимо.
+    // If album updated (e.g. cover appeared after rescan) — patch it.
+    if (alb.cover && cached._img && cached._img.getAttribute('src') !== alb.cover) {
+      cached._img.src = alb.cover
+    }
+    return cached
+  }
+
   const card = document.createElement('div')
-  card.className='album-card'; card.dataset.albumKey=alb.key
-  card.innerHTML=`
+  card.className = 'album-card'
+  card.dataset.albumKey = alb.key
+  card.classList.toggle('show-artist', !!showArtist)
+
+  // Розмітка робиться 1 раз. Далі ми тільки переставляємо ноду в DOM.
+  // Markup is created once. After that we only move the node around.
+  card.innerHTML = `
     <div class="album-cover">
-      ${alb.cover?`<img src="${alb.cover}" alt="" loading="lazy">`:`<div class="album-cover-ph">♫</div>`}
+      ${alb.cover ? `<img src="${alb.cover}" alt="" loading="lazy">` : `<div class="album-cover-ph">♫</div>`}
       <div class="album-play-overlay"><div class="album-play-btn">▶</div></div>
     </div>
     <div class="album-info">
       <div class="album-name">${escHtml(alb.title)}</div>
-      ${showArtist?`<div class="album-sub">${escHtml(alb.artist)}</div>`:''}
-      ${alb.year?`<div class="album-year">${alb.year}</div>`:''}
+      <div class="album-sub">${escHtml(alb.artist)}</div>
+      <div class="album-year">${alb.year ? alb.year : ''}</div>
     </div>`
+
+  // Збережемо посилання на img для можливого оновлення
+  // Keep reference to img for potential updates
+  card._img = card.querySelector('img') || null
+
+  // rAF + кешований rect — уникаємо reflow на кожен піксель
+  // rAF + cached rect — avoid reflow on every pixel
+  let tiltRaf = null, cachedRect = null
+  card.addEventListener('mouseenter', () => { cachedRect = card.getBoundingClientRect() })
   card.addEventListener('mousemove', e => {
-    const r=card.getBoundingClientRect()
-    const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5
-    card.style.transform=`perspective(600px) rotateY(${x*12}deg) rotateX(${-y*10}deg) scale(1.03)`
+    if (tiltRaf) return
+    tiltRaf = requestAnimationFrame(() => {
+      tiltRaf = null
+      if (!cachedRect) return
+      const x = (e.clientX - cachedRect.left) / cachedRect.width  - .5
+      const y = (e.clientY - cachedRect.top)  / cachedRect.height - .5
+      card.style.transform = `perspective(600px) rotateY(${x*12}deg) rotateX(${-y*10}deg) scale(1.03)`
+    })
   })
-  card.addEventListener('mouseleave', () => { card.style.transform='' })
+  card.addEventListener('mouseleave', () => {
+    if (tiltRaf) { cancelAnimationFrame(tiltRaf); tiltRaf=null }
+    card.style.transform = ''
+    cachedRect = null
+  })
+
   card.addEventListener('click', () => openAlbum(card.dataset.albumKey))
+
+  domCache.albumCards.set(alb.key, card)
   return card
 }
+
 
 // ─── Деталь альбому ───────────────────────────────────────────
 function openAlbum(key) {
@@ -1055,16 +1268,18 @@ function openAlbum(key) {
   qs('#d-title').textContent=alb.title
   qs('#d-artist').textContent=alb.artist
   const totalSec=alb.tracks.reduce((s,t)=>s+(t.duration||0),0)
-  qs('#d-info').textContent=`${alb.tracks.length} треків${alb.year?' · '+alb.year:''} · ${fmt(totalSec)}`
+  qs('#d-info').textContent=`${alb.tracks.length} треків${alb.year?' · '+alb.year:''} · ${fmtTotal(totalSec)}`
   const tl=qs('#d-tracks'); tl.innerHTML=''
+  const trackFrag = document.createDocumentFragment()
   alb.tracks.forEach((track,i) => {
     const row=document.createElement('div')
     row.className='track-item'; row.dataset.path=track.path
     if (track.path===nowPath) row.classList.add('playing')
     row.innerHTML=`<div class="track-num">${track.trackNo||i+1}</div><div class="track-title">${escHtml(track.title)}</div><div class="track-dur">${fmt(track.duration)}</div>`
     row.addEventListener('click',()=>playFromAlbum(key,i))
-    tl.appendChild(row)
+    trackFrag.appendChild(row)
   })
+  tl.appendChild(trackFrag)
   showView('detail')
 }
 
@@ -1072,83 +1287,282 @@ function goBack() { showView(backTab, qs(`.tab[data-tab="${backTab}"]`)) }
 
 // ─── Songs ────────────────────────────────────────────────────
 function renderSongs() {
-  const list=qs('#song-list'); const {key,asc}=sortState.sng
-  const sorted=[...library].sort((a,b)=>{
-    if(key==='duration') return asc?(a.duration||0)-(b.duration||0):(b.duration||0)-(a.duration||0)
-    const c=(a[key]||'').toLowerCase().localeCompare((b[key]||'').toLowerCase()); return asc?c:-c
+  const list = qs('#song-list')
+  const { key, asc } = sortState.sng
+
+  // Сортування — тільки над масивом (швидко).
+  // Sorting is only on array (fast).
+  const sorted = [...library].sort((a,b) => {
+    if (key === 'duration') return asc ? (a.duration||0)-(b.duration||0) : (b.duration||0)-(a.duration||0)
+    const A = (a[key]||'').toLowerCase()
+    const B = (b[key]||'').toLowerCase()
+    const c = A.localeCompare(B)
+    return asc ? c : -c
   })
-  const totalSec=library.reduce((s,t)=>s+(t.duration||0),0)
-  qs('#sng-stats').innerHTML=`<strong>${library.length}</strong> songs · ${fmtTotal(totalSec)}`
-  list.innerHTML=''
-  for (const t of sorted) {
-    const row=document.createElement('div')
-    row.className='song-row'; row.dataset.path=t.path
-    if (t.path===nowPath) row.classList.add('playing')
-    row.innerHTML=`
-      <div class="song-thumb">${t.cover ? `<img src="${t.cover}" alt="">` : "♫"}</div>
-      <div class="song-info"><div class="song-title-t">${escHtml(t.title)}</div><div class="song-meta-t">${escHtml(t.artist)} — ${escHtml(t.album)}</div></div>
-      <div class="song-dur-t">${fmt(t.duration)}</div>`
-    row.addEventListener('click',()=>playSingle(t))
-    list.appendChild(row)
+
+  // Для черги у вкладці Songs (Next/Prev)
+  // Queue for Songs tab (Next/Prev)
+  sortedLib = sorted
+
+  // Статистика зверху (рахується один раз у buildAlbums)
+  // Header stats (computed once in buildAlbums)
+  qs('#sng-stats').innerHTML = `<strong>${libStats.songs}</strong> songs · ${fmtTotal(libStats.sec)}`
+
+  // ────────────────────────────────────────────────────────────
+  // ВАЖЛИВО: не будуємо 5–20 тисяч рядків за один прохід.
+  // Це дає "секунду тиші" на кліках і сортуванні.
+  //
+  // IMPORTANT: do not build 5–20k rows in a single synchronous pass.
+  // It creates a noticeable 0.5–1s freeze on clicks/sorts.
+  //
+  // Рішення: малюємо порціями (chunk) через requestIdleCallback / setTimeout.
+  // Solution: chunked rendering via requestIdleCallback / setTimeout.
+  // ────────────────────────────────────────────────────────────
+
+  const job = ++songsRenderJob
+  list.replaceChildren()
+
+  const CHUNK = 260
+  let i = 0
+
+  const t0 = performance.now()
+
+  function pump(deadline) {
+    if (job !== songsRenderJob) return
+
+    const frag = document.createDocumentFragment()
+    let n = 0
+
+    // Якщо є requestIdleCallback — поважаємо бюджет часу.
+    // If requestIdleCallback exists — respect time budget.
+    while (i < sorted.length && n < CHUNK) {
+      frag.appendChild(getSongRow(sorted[i++]))
+      n++
+      if (deadline && deadline.timeRemaining && deadline.timeRemaining() < 6) break
+    }
+
+    if (n) list.appendChild(frag)
+
+    if (i < sorted.length) {
+      if (window.requestIdleCallback) {
+        requestIdleCallback(pump, { timeout: 80 })
+      } else {
+        setTimeout(pump, 0)
+      }
+      return
+    }
+
+    // Фініш — оновлюємо підсвічування "зараз грає"
+    // Finish — update "now playing" markers
+    refreshPlayingMarkers()
+
+    const ms = performance.now() - t0
+    if (ms > 120) log.warn(`SLOW(total) renderSongs: ${ms.toFixed(1)}ms (${sorted.length} rows)`)
   }
+
+  if (window.requestIdleCallback) requestIdleCallback(pump, { timeout: 80 })
+  else setTimeout(pump, 0)
+}
+
+function getSongRow(t) {
+  const cached = domCache.songRows.get(t.path)
+  if (cached) {
+    cached.classList.toggle('playing', t.path === nowPath)
+    // Якщо раптом з'явилась обкладинка — підкинемо
+    // If cover appears later — patch it
+    if (t.cover && cached._img && cached._img.getAttribute('src') !== t.cover) cached._img.src = t.cover
+    return cached
+  }
+
+  const row = document.createElement('div')
+  row.className = 'song-row'
+  row.dataset.path = t.path
+  row.classList.toggle('playing', t.path === nowPath)
+
+  row.innerHTML = `
+    <div class="song-thumb">${t.cover ? `<img src="${t.cover}" alt="">` : "♫"}</div>
+    <div class="song-info">
+      <div class="song-title-t">${escHtml(t.title)}</div>
+      <div class="song-meta-t">${escHtml(t.artist)} — ${escHtml(t.album)}</div>
+    </div>
+    <div class="song-dur-t">${fmt(t.duration)}</div>`
+
+  row._img = row.querySelector('img') || null
+  row.addEventListener('click', () => playSingle(t))
+
+  domCache.songRows.set(t.path, row)
+  return row
 }
 
 // ─── MOOD ─────────────────────────────────────────────────────
+//
+// Алгоритм базується на моделі Рассела (circumplex model of affect):
+// два виміри — збудження (arousal) і валентність (valence).
+//
+// Algorithm based on Russell's circumplex model of affect:
+// two dimensions — arousal and valence.
+//
+// Сигнали по пріоритету:
+//   1. Жанр (найточніший — теговий метадата)
+//   2. BPM — темп напряму корелює зі збудженням (arousal)
+//   3. Середня тривалість треку — довгі треки = ambient/chill
+//   4. Лад (мажор/мінор) — мінор = нижча валентність
+//   5. Колір обкладинки — слабкий сигнал, тільки fallback
+//
+// Signal priority:
+//   1. Genre (most reliable — tagged metadata)
+//   2. BPM — tempo directly correlates with arousal
+//   3. Average track duration — long tracks = ambient/chill
+//   4. Mode (major/minor) — minor = lower valence
+//   5. Cover color — weak signal, fallback only
+// ──────────────────────────────────────────────────────────────
 
-// Жанрові ключові слова для кожного настрою
-// Genre keywords for each mood
+// Жанри по настрою — зі списків музичної психології
+// Genres per mood — from music psychology literature
 const MOOD_GENRES = {
-  chill:      ['ambient','chillout','downtempo','lo-fi','lofi','new age','jazz','acoustic','bossa nova','classical','easy listening','trip-hop'],
-  focus:      ['post-rock','instrumental','electronic','idm','minimal','classical','progressive','math rock','drone'],
-  energy:     ['rock','metal','punk','hardcore','hip-hop','hip hop','rap','dance','electronic','drum and bass','dnb','techno','house','pop punk','alternative'],
-  melancholy: ['blues','folk','indie','post-punk','shoegaze','darkwave','sad','emo','country','singer-songwriter','melancholic'],
-  random:     [],
+  chill: [
+    'ambient','chillout','chill','downtempo','lo-fi','lofi','lo fi',
+    'new age','jazz','acoustic','bossa nova','classical','easy listening',
+    'trip-hop','trip hop','soul','r&b','neo soul','soft rock','slowcore',
+    'dream pop','chillwave','nujabes','bedroom pop'
+  ],
+  focus: [
+    'post-rock','post rock','instrumental','idm','minimal','minimalism',
+    'classical','progressive','math rock','drone','ambient','krautrock',
+    'post-metal','cinematic','soundtrack','score','contemporary classical',
+    'neoclassical','modern classical','electronic','synth'
+  ],
+  energy: [
+    'rock','metal','punk','hardcore','hip-hop','hip hop','rap','dance',
+    'drum and bass','dnb','techno','house','pop punk','alternative',
+    'grunge','thrash','death metal','black metal','electro','breakbeat',
+    'jungle','gabber','speedcore','ska','reggae','funk','disco',
+    'hard rock','heavy metal','industrial','noise rock'
+  ],
+  melancholy: [
+    'blues','folk','indie','post-punk','shoegaze','darkwave','sad','emo',
+    'country','singer-songwriter','melancholic','gothic','dark folk',
+    'slowcore','sadcore','depressive','black metal','doom','doom metal',
+    'chamber pop','baroque pop','torch song','death country','americana'
+  ],
+  random: [],
 }
 
-// Кольорові скорери — fallback якщо жанру немає
-// Color scorers — fallback when genre tags are absent
-const COLOR_SCORERS = {
-  chill:      c => c.b - c.r + c.b - c.g,
-  focus:      c => (c.r+c.b)/2 - c.g,
-  energy:     c => c.r + c.g/2 - c.b,
-  melancholy: c => 255 - (c.r+c.g+c.b)/3,
-  random:     () => Math.random() * 255,
+// Мінорні лади — асоціюються з нижчою валентністю (сум, напруга)
+// Minor keys — associated with lower valence (sadness, tension)
+const MINOR_KEYS = new Set([
+  'Am','Bm','Cm','Dm','Em','Fm','Gm',
+  'A minor','B minor','C minor','D minor','E minor','F minor','G minor',
+  'Amin','Bmin','Cmin','Dmin','Emin','Fmin','Gmin'
+])
+
+// Цільові BPM діапазони для кожного настрою (дані з музичної психології)
+// Target BPM ranges per mood (from music psychology data)
+// Chill: 60-95 BPM | Focus: 85-110 | Energy: 120-180 | Melancholy: 55-85
+const BPM_TARGETS = {
+  chill:      { ideal: 75,  range: 35 },   // 40–110
+  focus:      { ideal: 97,  range: 25 },   // 72–122
+  energy:     { ideal: 145, range: 40 },   // 105–185
+  melancholy: { ideal: 68,  range: 30 },   // 38–98
 }
 
-// Рахуємо скор альбому: спочатку жанр (0 або 1), потім колір як доповнення
-// Score album: genre first (0 or 1), then color as supplement
+// Цільова середня тривалість треку в секундах
+// Target average track duration in seconds
+const DUR_TARGETS = {
+  chill:      { ideal: 280, range: 120 },  // ~4-6хв — типово для ambient
+  focus:      { ideal: 360, range: 150 },  // ~5-7хв — довгі інструментальні
+  energy:     { ideal: 195, range: 90 },   // ~2.5-4хв — компактні треки
+  melancholy: { ideal: 250, range: 100 },  // ~3-5хв
+}
+
+// Гаусова функція подібності — 1.0 в ідеалі, спадає зі збільшенням відстані
+// Gaussian similarity — 1.0 at ideal, decays with distance
+function gaussSim(value, ideal, range) {
+  const diff = value - ideal
+  return Math.exp(-(diff*diff) / (2*range*range))
+}
+
+// Основна функція скорингу альбому
+// Main album scoring function
 function scoreMoodAlbum(alb, mood) {
   if (mood === 'random') return Math.random()
 
-  const keywords = MOOD_GENRES[mood]
+  let score = 0
+  let signals = 0  // скільки сигналів спрацювало / how many signals fired
 
-  // Збираємо жанри з усіх треків альбому
-  // Collect genres from all album tracks
-  const genreText = alb.tracks
-    .flatMap(t => t.genre ? (Array.isArray(t.genre) ? t.genre : [t.genre]) : [])
+  // ── 1. Жанр (вага 0.45) ──────────────────────────────────────
+  const genreWords = alb.tracks
+    .flatMap(t => {
+      const g = t.genre
+      return g ? (Array.isArray(g) ? g : [g]) : []
+    })
     .join(' ').toLowerCase()
 
-  // Жанровий скор — скільки ключових слів збіглось (нормалізовано)
-  // Genre score — how many keywords matched (normalized)
-  let genreScore = 0
-  if (genreText) {
-    const hits = keywords.filter(kw => genreText.includes(kw)).length
-    genreScore = hits / keywords.length  // 0..1
+  if (genreWords) {
+    const kws = MOOD_GENRES[mood]
+    // Нормалізований скор — враховує кількість збігів
+    const hits = kws.reduce((n,kw) => n + (genreWords.includes(kw) ? 1 : 0), 0)
+    // Хоча б один збіг = 0.5, більше = лінійно до 1.0
+    const genreScore = hits > 0 ? Math.min(1, 0.5 + hits * 0.2) : 0
+    // Штраф якщо жанр збігається з протилежним настроєм
+    const opposite = { chill:'energy', energy:'chill', melancholy:'focus', focus:'melancholy' }
+    const opp = MOOD_GENRES[opposite[mood]] || []
+    const oppHits = opp.reduce((n,kw) => n + (genreWords.includes(kw) ? 1 : 0), 0)
+    score += (genreScore - oppHits * 0.15) * 0.45
+    signals++
   }
 
-  // Кольоровий скор — нормалізований 0..1
-  // Color score — normalized 0..1
-  const c = albumColorCache[alb.key]
-  const colorRaw = c ? COLOR_SCORERS[mood](c) : 0
-  const colorScore = Math.max(0, Math.min(1, (colorRaw + 255) / 510))
+  // ── 2. BPM (вага 0.25) ────────────────────────────────────────
+  const bpmValues = alb.tracks.map(t => t.bpm).filter(b => b && b > 30 && b < 250)
+  if (bpmValues.length > 0) {
+    const avgBpm = bpmValues.reduce((s,b) => s+b, 0) / bpmValues.length
+    const target = BPM_TARGETS[mood]
+    if (target) {
+      score += gaussSim(avgBpm, target.ideal, target.range) * 0.25
+      signals++
+    }
+  }
 
-  // Якщо є жанри — вони домінують (70%), колір доповнює (30%)
-  // If genres found — they dominate (70%), color supplements (30%)
-  // Якщо жанрів нема — тільки колір
-  // If no genres — color only
-  return genreText
-    ? genreScore * 0.7 + colorScore * 0.3
-    : colorScore
+  // ── 3. Середня тривалість треку (вага 0.15) ───────────────────
+  const durations = alb.tracks.map(t => t.duration).filter(d => d > 0)
+  if (durations.length > 0) {
+    const avgDur = durations.reduce((s,d) => s+d, 0) / durations.length
+    const target = DUR_TARGETS[mood]
+    if (target) {
+      score += gaussSim(avgDur, target.ideal, target.range) * 0.15
+      signals++
+    }
+  }
+
+  // ── 4. Лад мажор/мінор (вага 0.10) ───────────────────────────
+  // Мінор підвищує скор меланхолії і знижує енергію
+  // Minor boosts melancholy, slightly reduces energy
+  const keyValues = alb.tracks.map(t => t.key).filter(Boolean)
+  if (keyValues.length > 0) {
+    const minorCount = keyValues.filter(k => MINOR_KEYS.has(k)).length
+    const minorRatio = minorCount / keyValues.length
+    if (mood === 'melancholy') score += minorRatio * 0.10
+    if (mood === 'energy')     score -= minorRatio * 0.05
+    if (mood === 'chill')      score += (1-minorRatio) * 0.05
+    signals++
+  }
+
+  // ── 5. Колір обкладинки (вага 0.05 — слабкий fallback) ────────
+  const c = albumColorCache[alb.key]
+  if (c) {
+    const colorSignals = {
+      chill:      (c.b - (c.r+c.g)/2) / 255,
+      focus:      ((c.r+c.b)/2 - c.g) / 255,
+      energy:     (c.r - c.b) / 255,
+      melancholy: (1 - (c.r+c.g+c.b)/765),
+    }
+    const cs = colorSignals[mood] || 0
+    score += Math.max(0, cs) * 0.05
+  }
+
+  // Якщо жодного сигналу не спрацювало — повертаємо невеликий рандом
+  // If no signals fired — return small random to avoid all-zeros tie
+  return signals === 0 ? Math.random() * 0.1 : score
 }
 
 const MOOD_LABELS = {
@@ -1159,6 +1573,8 @@ const MOOD_LABELS = {
   random:     'Сюрприз',
 }
 
+let currentMoodPickElem = null  // DOM елемент картки що зараз грає
+
 function playMood(mood) {
   const all = Object.values(albums).filter(a => a.tracks.length > 0)
 
@@ -1168,25 +1584,19 @@ function playMood(mood) {
   }
   qs('#mood-hint').style.display = 'none'
 
-  // Сортуємо за скором і беремо топ-4 (але не більше ніж є)
-  // Sort by score and take top-4 (but no more than available)
   const scored = all
     .map(a => ({ alb: a, score: scoreMoodAlbum(a, mood) }))
     .sort((a,b) => b.score - a.score)
 
   const picks = scored.slice(0, Math.min(4, scored.length)).map(s => s.alb)
 
-  // Якщо тільки один альбом — одразу грати без вибору
-  // If only one album — play immediately without selection screen
-  if (picks.length === 1) { startMoodAlbum(picks[0]); return }
+  // Один альбом — одразу грати
+  // Only one album — play immediately
+  if (picks.length === 1) { startMoodAlbum(picks[0], null); return }
 
-  // Показуємо екран вибору
-  // Show selection screen
   showMoodPicks(mood, picks)
 }
 
-// Показуємо пропозиції альбомів
-// Show album suggestions
 function showMoodPicks(mood, picks) {
   qs('.mood-grid').style.display  = 'none'
   qs('#mood-picks').classList.add('visible')
@@ -1194,10 +1604,12 @@ function showMoodPicks(mood, picks) {
 
   const grid = qs('#mood-pick-grid')
   grid.innerHTML = ''
+  currentMoodPickElem = null
 
   for (const alb of picks) {
     const card = document.createElement('div')
     card.className = 'mood-pick-card'
+    card.dataset.key = alb.key
     card.innerHTML = `
       <div class="mood-pick-cover">
         ${alb.cover ? `<img src="${alb.cover}" alt="" loading="lazy">` : '♫'}
@@ -1207,27 +1619,54 @@ function showMoodPicks(mood, picks) {
         <div class="mood-pick-artist">${escHtml(alb.artist)}</div>
         ${alb.year ? `<div class="mood-pick-year">${alb.year}</div>` : ''}
       </div>`
-    card.addEventListener('click', () => startMoodAlbum(alb))
+    card.addEventListener('click', () => startMoodAlbum(alb, card))
     grid.appendChild(card)
   }
 }
 
-// Запускаємо альбом після вибору
-// Start album after selection
-function startMoodAlbum(alb) {
+// Запускаємо одразу — залишаємось на Mood екрані
+// Start immediately — stay on Mood screen
+function startMoodAlbum(alb, cardEl) {
+  // Прибираємо попереднє підсвічування + іконку
+  // Remove previous highlight + icon
+  if (currentMoodPickElem) {
+    currentMoodPickElem.classList.remove('now-playing')
+    const old = currentMoodPickElem.querySelector('.mood-pick-playing-icon')
+    if (old) old.remove()
+  }
+
+  // Підсвічуємо вибрану картку з анімацією
+  // Highlight selected card with animation
+  if (cardEl) {
+    // Якщо там вже була іконка — прибираємо (щоб не накопичувались)
+    // If icon already exists — remove (avoid stacking)
+    const ex = cardEl.querySelector('.mood-pick-playing-icon')
+    if (ex) ex.remove()
+
+    cardEl.classList.add('now-playing')
+
+    const playIcon = document.createElement('div')
+    playIcon.className = 'mood-pick-playing-icon'
+    playIcon.textContent = '♪'
+    cardEl.appendChild(playIcon)
+
+    currentMoodPickElem = cardEl
+  } else {
+    currentMoodPickElem = null
+  }
+
+  // Запускаємо в shuffle — залишаємось на Mood
+  // Start in shuffle — stay on Mood screen
   queue    = [...alb.tracks].sort(() => Math.random() - 0.5)
   qIdx     = 0
   curAlbum = alb.key
-  backTab  = 'mood'
   playTrack(queue[0])
-  openAlbum(alb.key)
 }
 
-// Повертаємось до вибору настрою
-// Go back to mood selection
 function backToMoodGrid() {
   qs('.mood-grid').style.display = ''
   qs('#mood-picks').classList.remove('visible')
+  currentMoodPickElem = null
 }
 
 // ─── Навігація ────────────────────────────────────────────────
@@ -1259,14 +1698,17 @@ function albumPlay(doShuffle) {
   qIdx=0; playTrack(queue[0])
 }
 function playSingle(track) {
-  queue=[...library].sort((a,b)=>a.title.localeCompare(b.title))
-  qIdx=queue.findIndex(t=>t.path===track.path)
-  if(qIdx<0){queue=[track];qIdx=0}
+  // sortedLib вже готовий — не сортуємо кожен раз
+  // sortedLib already ready — no sorting on every click
+  queue = sortedLib
+  qIdx  = queue.findIndex(t => t.path === track.path)
+  if (qIdx < 0) { queue = [track]; qIdx = 0 }
   playTrack(track)
 }
 
 function playTrack(track) {
   if (!track) return
+  log.info(`Playing: "${track.title}" — ${track.artist} [${track.quality?.container||'?'}]`)
   nowPath=track.path
   audio.src='file:///'+track.path.replace(/\\/g,'/')
   audio.play().catch(e=>console.error('Playback error:',e))
@@ -1289,9 +1731,21 @@ function playTrack(track) {
   refreshPlayingMarkers()
 }
 
+// Зберігаємо попередній "playing" елемент — не скануємо весь DOM
+// Store previous "playing" element — no full DOM scan
+let _prevPlayingEls = []
+
 function refreshPlayingMarkers() {
-  qsa('.track-item').forEach(el=>el.classList.toggle('playing',el.dataset.path===nowPath))
-  qsa('.song-row').forEach(el=>el.classList.toggle('playing',el.dataset.path===nowPath))
+  // Прибираємо з попередніх
+  _prevPlayingEls.forEach(el => el.classList.remove('playing'))
+  _prevPlayingEls = []
+  if (!nowPath) return
+  // Знаходимо нові по data-path — швидко через атрибутний селектор
+  const sel = `[data-path="${CSS.escape(nowPath)}"]`
+  document.querySelectorAll(sel).forEach(el => {
+    el.classList.add('playing')
+    _prevPlayingEls.push(el)
+  })
 }
 
 function togglePlay()   { if(queue.length) audio.paused?audio.play():audio.pause() }
@@ -1323,15 +1777,27 @@ document.addEventListener('keydown',e=>{
 
 // ─── Сортування ───────────────────────────────────────────────
 function setSortBtn(sel,el){ qsa(sel).forEach(b=>b.classList.remove('active')); el.classList.add('active') }
-function sortAlbums(key,el){ sortState.alb.key=key; setSortBtn('#sort-albums .s-btn',el); renderGrid() }
-function sortSongs(key,el) { sortState.sng.key=key; setSortBtn('#sort-songs .s-btn',el); renderSongs() }
-function flipDir(v) {
-  const map={alb:['alb-dir',renderGrid],sng:['sng-dir',renderSongs]}
-  const [id,fn]=map[v]
-  sortState[v].asc=!sortState[v].asc
-  qs('#'+id).textContent=sortState[v].asc?'↑':'↓'
-  fn()
+
+// На сортуванні міряємо "frame time" — бо біль часто не в JS, а в декоді/paint зображень.
+// On sorting we measure "frame time" — pain is often not JS, but image decode/paint.
+function sortAlbums(key,el){
+  sortState.alb.key = key
+  setSortBtn('#sort-albums .s-btn', el)
+  log.perfFrame('renderGrid[sort]', renderGrid, 60)
 }
+function sortSongs(key,el){
+  sortState.sng.key = key
+  setSortBtn('#sort-songs .s-btn', el)
+  log.perfFrame('renderSongs[sort]', renderSongs, 60)
+}
+function flipDir(v) {
+  const map = { alb:['alb-dir', renderGrid], sng:['sng-dir', renderSongs] }
+  const [id, fn] = map[v]
+  sortState[v].asc = !sortState[v].asc
+  qs('#'+id).textContent = sortState[v].asc ? '↑' : '↓'
+  log.perfFrame(`flipDir[${v}]`, fn, 60)
+}
+
 
 function showLoading(msg='Завантаження…'){ qs('#loading-text').textContent=msg; qs('#loading-overlay').classList.add('visible') }
 function hideLoading(){ qs('#loading-overlay').classList.remove('visible') }

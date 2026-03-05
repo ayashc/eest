@@ -7,6 +7,38 @@ const fs   = require('fs')
 const os   = require('os')
 const mm   = require('music-metadata')
 
+// ─── Логи ─────────────────────────────────────────────────────
+// Пишемо логи в файл (userData/eest.log) + у консоль.
+// Write logs to file (userData/eest.log) + console.
+function logPath() {
+  try { return path.join(app.getPath('userData'), 'eest.log') } catch (_) { return null }
+}
+function mlog(level, ...args) {
+  const ts = new Date().toISOString()
+  const msg = args.map(a => typeof a === 'string' ? a : (() => { try { return JSON.stringify(a) } catch { return String(a) } })()).join(' ')
+  const line = `[${ts}] [${String(level).toUpperCase()}] ${msg}\n`
+  try {
+    const p = logPath()
+    if (p) fs.appendFileSync(p, line, 'utf-8')
+  } catch (_) {}
+
+  // І в stdout/stderr теж — корисно коли запускаєш з терміналу
+  // Also to stdout/stderr — useful when running from terminal
+  if (level === 'error') console.error(line.trim())
+  else if (level === 'warn') console.warn(line.trim())
+  else console.log(line.trim())
+}
+
+// Ловимо падіння main процесу, щоб не було "просто закрився" без слідів.
+// Catch main process crashes so we have traces.
+process.on('uncaughtException', (err) => {
+  mlog('error', 'uncaughtException', err?.stack || err?.message || String(err))
+})
+process.on('unhandledRejection', (reason) => {
+  mlog('error', 'unhandledRejection', reason?.stack || reason?.message || String(reason))
+})
+
+
 let mainWindow
 
 const AUDIO_EXTS = new Set([
@@ -70,6 +102,8 @@ async function parseTrack(filePath) {
       disc:        common.disk?.no    || 1,
       duration:    format.duration    || 0,
       genre:       common.genre       || [],
+      bpm:         common.bpm        || null,
+      key:         common.key        || null,
       cover,
       quality: {
         container:     format.container     || null,
@@ -82,28 +116,61 @@ async function parseTrack(filePath) {
   } catch (e) { return null }
 }
 
+
+async function parseAll(files, concurrency = 6) {
+  // Паралельний парсинг з лімітом — швидше сканування на великих бібліотеках.
+  // Parallel parsing with a limit — faster scanning for big libraries.
+  const out = []
+  let i = 0
+
+  async function worker() {
+    while (i < files.length) {
+      const f = files[i++]
+      const t = await parseTrack(f)
+      if (t) out.push(t)
+    }
+  }
+
+  const n = Math.max(1, Math.min(concurrency, files.length))
+  await Promise.all(Array.from({ length: n }, worker))
+  return out
+}
+
 ipcMain.handle('open-folder-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
   return result.canceled ? null : result.filePaths[0]
 })
 ipcMain.handle('scan-folder', async (event, folderPath) => {
-  const files = scanDir(folderPath), tracks = []
-  for (const f of files) { const t = await parseTrack(f); if (t) tracks.push(t) }
+  mlog('info', 'scan-folder', folderPath)
+  const files = scanDir(folderPath)
+  mlog('info', `scan-folder found ${files.length} files`)
+  const tracks = await parseAll(files, 6)
+  mlog('info', `scan-folder parsed ${tracks.length} tracks`)
   return tracks
 })
 ipcMain.handle('save-config',  (_, config) => { saveConfig(config); return true })
 ipcMain.handle('load-config',  () => loadConfig())
 ipcMain.handle('scan-saved-folders', async (_, folders) => {
-  const all = []
+  mlog('info', 'scan-saved-folders', folders)
+  const allFiles = []
   for (const folder of folders) {
     if (!fs.existsSync(folder)) continue
-    for (const f of scanDir(folder)) { const t = await parseTrack(f); if (t) all.push(t) }
+    allFiles.push(...scanDir(folder))
   }
-  return all
+  return await parseAll(allFiles, 6)
 })
 ipcMain.on('window-minimize', () => mainWindow.minimize())
 ipcMain.on('window-maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize())
 ipcMain.on('window-close',    () => mainWindow.close())
+
+// Логи з рендерера (index.html) — пишемо в той самий eest.log
+// Logs from renderer (index.html) — append to same eest.log
+ipcMain.on('renderer-log', (_, payload) => {
+  if (!payload) return
+  mlog(payload.level || 'info', payload.message || '')
+})
+
+mlog('info', 'App starting')
 
 function createWindow() {
   // Перевіряємо чи Win11 (build 22000+) — тільки там підтримується acrylic з прозорістю
@@ -124,5 +191,8 @@ function createWindow() {
   mainWindow.loadFile('src/index.html')
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  mlog('info', 'Log file:', logPath())
+  createWindow()
+})
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
